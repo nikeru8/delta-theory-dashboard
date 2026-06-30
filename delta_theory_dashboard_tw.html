@@ -1,0 +1,1798 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Delta 理論台股互動查詢與回測模型</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel2: #1f2937;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --line: #334155;
+      --accent: #38bdf8;
+      --good: #22c55e;
+      --bad: #ef4444;
+      --warn: #f59e0b;
+      --blue: #3b82f6;
+      --red: #ef4444;
+      --orange: #f97316;
+      --green: #22c55e;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, #1e293b 0, var(--bg) 42%, #020617 100%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+    header {
+      padding: 20px 22px 10px;
+      border-bottom: 1px solid rgba(148,163,184,.16);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+      letter-spacing: .02em;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+      max-width: 1100px;
+    }
+    .wrap {
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      gap: 14px;
+      padding: 14px;
+    }
+    @media (max-width: 1080px) {
+      .wrap { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: rgba(17,24,39,.92);
+      border: 1px solid rgba(148,163,184,.18);
+      border-radius: 16px;
+      box-shadow: 0 18px 55px rgba(0,0,0,.25);
+      overflow: hidden;
+    }
+    .panel h2 {
+      margin: 0;
+      padding: 14px 16px;
+      font-size: 15px;
+      border-bottom: 1px solid rgba(148,163,184,.14);
+      background: rgba(15,23,42,.55);
+    }
+    .section { padding: 14px 16px; border-bottom: 1px solid rgba(148,163,184,.1); }
+    .section:last-child { border-bottom: 0; }
+    label {
+      display: block;
+      color: #cbd5e1;
+      font-size: 12px;
+      margin: 0 0 6px;
+    }
+    select, input, textarea, button {
+      width: 100%;
+      border: 1px solid rgba(148,163,184,.24);
+      background: #020617;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 9px 10px;
+      font: inherit;
+      font-size: 13px;
+      outline: none;
+    }
+    textarea { min-height: 118px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    button {
+      cursor: pointer;
+      border-color: rgba(56,189,248,.4);
+      background: linear-gradient(180deg, rgba(14,165,233,.22), rgba(2,132,199,.18));
+      font-weight: 650;
+    }
+    button.secondary { background: #0b1120; border-color: rgba(148,163,184,.24); font-weight: 500; }
+    button.warn { background: rgba(245,158,11,.15); border-color: rgba(245,158,11,.45); }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .row:last-child, .row3:last-child { margin-bottom: 0; }
+    .stockPicker { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+    #stockSearch { font-size: 14px; }
+    .selectedAsset {
+      border: 1px solid rgba(56,189,248,.28);
+      background: rgba(14,165,233,.08);
+      border-radius: 10px;
+      padding: 9px 10px;
+      color: #e0f2fe;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .stockResults {
+      max-height: 230px;
+      overflow: auto;
+      border: 1px solid rgba(148,163,184,.14);
+      border-radius: 10px;
+      background: rgba(2,6,23,.35);
+    }
+    .stockResult {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      border: 0;
+      border-bottom: 1px solid rgba(148,163,184,.1);
+      border-radius: 0;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      font-weight: 500;
+    }
+    .stockResult:last-child { border-bottom: 0; }
+    .stockResult:hover, .stockResult.active { background: rgba(56,189,248,.12); }
+    .stockResult .symbol { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: #bae6fd; }
+    .stockResult .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stockResult .meta { color: var(--muted); font-size: 11px; }
+    .checkboxes { display: flex; flex-wrap: wrap; gap: 8px; }
+    .check {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid rgba(148,163,184,.2);
+      background: rgba(2,6,23,.48);
+      padding: 7px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: #dbeafe;
+    }
+    .check input { width: auto; margin: 0; }
+    .main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    @media (max-width: 900px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: rgba(15,23,42,.86);
+      border: 1px solid rgba(148,163,184,.16);
+      border-radius: 14px;
+      padding: 12px 13px;
+      min-height: 130px;
+    }
+    .card .title { color: #cbd5e1; font-size: 13px; margin-bottom: 7px; display:flex; justify-content:space-between; gap:8px; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      background: rgba(148,163,184,.12);
+      color: #e2e8f0;
+      white-space: nowrap;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display:inline-block; }
+    .big { font-size: 20px; font-weight: 780; margin: 2px 0 8px; }
+    .small { font-size: 12px; color: var(--muted); line-height: 1.65; }
+    .chartPanel { padding: 0; }
+    .chartTop {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(148,163,184,.14);
+    }
+    .chartTitle { font-weight: 720; font-size: 14px; }
+    .chartTools { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chartTools button { width: auto; padding: 7px 10px; font-size: 12px; }
+    #chartWrap {
+      position: relative;
+      height: 560px;
+      min-height: 420px;
+    }
+    #chart { position: absolute; inset: 0; }
+    #eventOverlay {
+      pointer-events: none;
+      position: absolute;
+      left: 0; right: 0; top: 0; bottom: 30px;
+      overflow: hidden;
+    }
+    .vline {
+      position: absolute; top: 0; bottom: 0; width: 1px;
+      opacity: .72;
+      box-shadow: 0 0 14px rgba(255,255,255,.06);
+    }
+    .band {
+      position: absolute; top: 0; bottom: 0;
+      border-left: 1px solid rgba(255,255,255,.08);
+      border-right: 1px solid rgba(255,255,255,.08);
+      opacity: .16;
+    }
+    .vlabel {
+      position: absolute; top: 8px; transform: translateX(4px);
+      padding: 3px 6px; border-radius: 6px;
+      background: rgba(2,6,23,.72);
+      border: 1px solid rgba(255,255,255,.12);
+      color: #e5e7eb; font-size: 11px; white-space: nowrap;
+    }
+    #tooltip {
+      position: absolute;
+      z-index: 20;
+      pointer-events: none;
+      display: none;
+      min-width: 220px;
+      padding: 9px 10px;
+      border-radius: 10px;
+      background: rgba(2,6,23,.92);
+      border: 1px solid rgba(148,163,184,.3);
+      font-size: 12px;
+      line-height: 1.55;
+      color: #e5e7eb;
+      box-shadow: 0 10px 28px rgba(0,0,0,.32);
+    }
+    .grid2 { display:grid; grid-template-columns: 1.15fr .85fr; gap: 14px; }
+    @media (max-width: 1080px) { .grid2 { grid-template-columns: 1fr; } }
+    .tableWrap { overflow: auto; max-height: 370px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 8px 9px; border-bottom: 1px solid rgba(148,163,184,.12); text-align: left; white-space: nowrap; }
+    th { color: #cbd5e1; position: sticky; top: 0; background: #0f172a; z-index: 1; }
+    .status {
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.65;
+      background: rgba(2,6,23,.56);
+      border: 1px solid rgba(148,163,184,.16);
+      color: #cbd5e1;
+    }
+    .status.good { border-color: rgba(34,197,94,.35); color: #dcfce7; }
+    .status.warn { border-color: rgba(245,158,11,.45); color: #fef3c7; }
+    .status.bad { border-color: rgba(239,68,68,.42); color: #fee2e2; }
+    .legend { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .legend .badge { border: 1px solid rgba(148,163,184,.16); }
+    .note { color: var(--muted); font-size: 12px; line-height: 1.7; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .error { color: #fecaca; }
+    .ok { color: #bbf7d0; }
+    .warnText { color: #fde68a; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Delta 理論台股互動查詢與回測模型</h1>
+  <div class="subtitle">
+    用「時間網格」找可能轉折窗口，再用 K 線驗證。內建：中短期 ITD、中期 MTD；可查現在所在位置、下一個可能轉折、歷史疊圖、簡易回測。
+  </div>
+</header>
+
+<div class="wrap">
+  <aside class="panel">
+    <h2>查詢設定</h2>
+
+    <div class="section">
+      <div class="stockPicker">
+        <label for="stockSearch">股票搜尋</label>
+        <input id="stockSearch" type="search" placeholder="輸入代碼或名稱，例如 6446、藥華、台積" autocomplete="off" />
+        <div id="selectedAsset" class="selectedAsset">正在讀取本機市場資料...</div>
+        <div id="stockResults" class="stockResults"></div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="barTf">K 線週期</label>
+          <select id="barTf">
+            <option value="1d" selected>日 K</option>
+          </select>
+        </div>
+        <div>
+          <label for="lookback">回查範圍</label>
+          <select id="lookback">
+            <option value="60">60 天</option>
+            <option value="180">180 天</option>
+            <option value="365">1 年</option>
+            <option value="730" selected>2 年</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="primarySource">主要資料來源</label>
+          <select id="primarySource">
+            <option value="local" selected>Hermes SQLite 本機日 K</option>
+          </select>
+        </div>
+        <div>
+          <label for="verifyTolerance">交叉驗證容忍</label>
+          <select id="verifyTolerance">
+            <option value="0.002">0.2%</option>
+            <option value="0.005" selected>0.5%</option>
+            <option value="0.01">1.0%</option>
+          </select>
+        </div>
+      </div>
+      <button id="loadBtn">載入資料並更新模型</button>
+      <div id="dataStatus" class="status" style="margin-top:10px;">尚未載入資料。</div>
+    </div>
+
+    <div class="section">
+      <label>顯示 Delta 疊圖</label>
+      <div class="checkboxes">
+        <label class="check" hidden><input type="checkbox" id="showSTD"> STD 短期</label>
+        <label class="check"><input type="checkbox" id="showITD" checked> ITD 中短期</label>
+        <label class="check"><input type="checkbox" id="showMTD"> MTD 中期</label>
+        <label class="check"><input type="checkbox" id="showGrid"> 顏色線</label>
+        <label class="check"><input type="checkbox" id="showWindow" checked> 轉折窗</label>
+      </div>
+      <div class="legend">
+        <span class="badge"><span class="dot" style="background:var(--red)"></span>紅 R</span>
+        <span class="badge"><span class="dot" style="background:var(--blue)"></span>藍 B</span>
+        <span class="badge"><span class="dot" style="background:var(--orange)"></span>橘 O</span>
+        <span class="badge"><span class="dot" style="background:var(--green)"></span>綠 G</span>
+      </div>
+      <p class="note" style="margin-bottom:0;">顏色不是多空訊號，只是 Delta 的時間網格。重點是：轉折點相對於哪條顏色線、偏移幾天或幾小時。</p>
+    </div>
+
+    <div class="section">
+      <label>Delta 週期錨點</label>
+      <div class="row">
+        <div hidden>
+          <label for="stdAnchor">STD：此日 = 紅色</label>
+          <input id="stdAnchor" type="date" value="1991-01-01" />
+        </div>
+        <div hidden>
+          <label for="stdAnchorColor">STD 錨點顏色</label>
+          <select id="stdAnchorColor">
+            <option value="R" selected>Red 紅</option>
+            <option value="B">Blue 藍</option>
+            <option value="O">Orange 橘</option>
+            <option value="G">Green 綠</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="moonAnchor">ITD/MTD：滿月錨點</label>
+          <input id="moonAnchor" type="datetime-local" value="2000-01-21T12:40" />
+        </div>
+        <div>
+          <label for="moonAnchorColor">滿月錨點顏色</label>
+          <select id="moonAnchorColor">
+            <option value="R" selected>Red 紅</option>
+            <option value="B">Blue 藍</option>
+            <option value="O">Orange 橘</option>
+            <option value="G">Green 綠</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="p2Role">Point 2 預設角色</label>
+          <select id="p2Role">
+            <option value="H">高點 High</option>
+            <option value="L" selected>低點 Low</option>
+          </select>
+        </div>
+        <div>
+          <label for="flipRole">高低點輪替</label>
+          <select id="flipRole">
+            <option value="0" selected>正常</option>
+            <option value="1">整體反向</option>
+          </select>
+        </div>
+      </div>
+      <p class="note" style="margin-bottom:0;">使用本機校準檔時，錨點會固定為校準時使用的時間基準；若套用自訂模板，才可手動調整錨點。</p>
+    </div>
+
+    <div class="section">
+      <label for="templateJson">目前商品 Delta 點模板 JSON</label>
+      <textarea id="templateJson"></textarea>
+      <div class="row" style="margin-top:10px;">
+        <button id="applyTemplate" class="secondary">套用模板</button>
+        <button id="resetTemplate" class="secondary">重置模板</button>
+      </div>
+      <p class="note" style="margin-bottom:0;">格式：每個週期一組陣列，點位用 <span class="mono">p,color,offsetDays,role</span>。</p>
+    </div>
+
+    <div class="section">
+      <label for="csvFile">手動匯入 CSV / 第二來源</label>
+      <input id="csvFile" type="file" accept=".csv,.txt" />
+      <p class="note" style="margin-bottom:0;">支援欄位：time/date, open, high, low, close, volume。可用來補足付費或券商匯出的 4H/日K資料。</p>
+    </div>
+  </aside>
+
+  <main class="main">
+    <section class="cards" id="cycleCards"></section>
+
+    <section class="panel chartPanel">
+      <div class="chartTop">
+        <div>
+          <div class="chartTitle" id="chartTitle">K 線圖</div>
+          <div class="small" id="visibleRange">橫軸：尚未載入</div>
+        </div>
+        <div class="chartTools">
+          <button class="secondary" data-bars="120">顯示 120 根</button>
+          <button class="secondary" data-bars="240">240 根</button>
+          <button class="secondary" data-bars="500">500 根</button>
+          <button class="secondary" id="fitBtn">全部</button>
+        </div>
+      </div>
+      <div id="chartWrap">
+        <div id="chart"></div>
+        <div id="eventOverlay"></div>
+        <div id="tooltip"></div>
+      </div>
+    </section>
+
+    <section class="grid2">
+      <div class="panel">
+        <h2>下一批 Delta 預測轉折</h2>
+        <div class="section tableWrap">
+          <table id="eventTable">
+            <thead><tr><th>時間</th><th>週期</th><th>點位</th><th>角色</th><th>顏色線</th><th>提醒</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>簡易回測</h2>
+        <div class="section">
+          <div class="row">
+            <div>
+              <label for="btCycle">回測週期</label>
+              <select id="btCycle">
+                <option value="ITD" selected>ITD 中短期</option>
+                <option value="MTD">MTD 中期</option>
+              </select>
+            </div>
+            <div>
+              <label for="confirmBars">確認等待根數</label>
+              <input id="confirmBars" type="number" min="1" max="20" value="4" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="feeBps">單邊成本 bps</label>
+              <input id="feeBps" type="number" min="0" max="100" value="2" />
+            </div>
+            <div>
+              <label for="btDirection">方向</label>
+              <select id="btDirection">
+                <option value="both" selected>多空都做</option>
+                <option value="long">只做多</option>
+                <option value="short">只做空</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="exitMode">出場方式</label>
+              <select id="exitMode">
+                <option value="reverse" selected>下一個反向 Delta 點</option>
+                <option value="fixed">固定持有根數</option>
+                <option value="trailing">移動停利</option>
+              </select>
+            </div>
+            <div>
+              <label for="exitBars">固定持有根數</label>
+              <input id="exitBars" type="number" min="1" max="120" value="20" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="trailPct">移動停利 %</label>
+              <input id="trailPct" type="number" min="0.5" max="50" step="0.5" value="8" />
+            </div>
+            <div></div>
+          </div>
+          <button id="runBt">執行回測</button>
+          <div id="btSummary" class="status" style="margin-top:10px;">尚未回測。</div>
+        </div>
+        <div class="section tableWrap">
+          <table id="tradeTable">
+            <thead><tr><th>訊號</th><th>進場</th><th>方向</th><th>出場</th><th>報酬</th><th>原因</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>模型說明：先看時間，再看價格</h2>
+      <div class="section note">
+        <b>人話版：</b>Delta 顏色線只是時間尺，不是紅就空、綠就多。真正的使用方式是：先看現在靠近哪個 Delta 點，再看價格有沒有出現「該跌不跌 / 該漲不漲」或突破確認。<br><br>
+        <b>ITD：</b>每次滿月放一條顏色線，四個月亮循環一輪。<br>
+        <b>MTD：</b>每三次滿月放一條顏色線，十二個月亮循環一輪。<br><br>
+        <b>進出場提醒：</b>預測低點附近，等「收盤站回低點 K 高點」再做多；預測高點附近，等「收盤跌破高點 K 低點」再做空或避開。停損放在低點 K 下方或高點 K 上方。這裡的回測採用確認日收盤進場，並可選下一個反向 Delta 點、固定持有根數或移動停利出場。<br><br><b>台股資料：</b>日 K 由本機 Hermes SQLite 資料包提供，不需 Yahoo/TWSE 網路請求；Delta 模板由每檔股票自己的歷史轉折校準，並在股票資訊中標示已校準、弱校準或資料不足。若要測其他來源，也可用 CSV 匯入。
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="./delta_market_data.js"></script>
+<script src="./delta_calibrations.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+(() => {
+  const MS_DAY = 86400000;
+  const TZ = 'Asia/Taipei';
+  const COLORS = ['R','B','O','G'];
+  const ALL_TFS = ['STD','ITD','MTD'];
+  const VISIBLE_TFS = ['ITD','MTD'];
+  const COLOR_META = {
+    R: { zh: '紅', en: 'Red', css: '#ef4444', desc: '時間網格線；STD 每 4 天重複一次' },
+    B: { zh: '藍', en: 'Blue', css: '#3b82f6', desc: '時間網格線；本身不代表多空' },
+    O: { zh: '橘', en: 'Orange', css: '#f97316', desc: '時間網格線；點位偏移由商品模板決定' },
+    G: { zh: '綠', en: 'Green', css: '#22c55e', desc: '時間網格線；用來定位 Delta 點' },
+  };
+
+  // Mean synodic month. Full-moon epoch: 2000-01-21 04:40 UTC.
+  // The default UI value is displayed in Asia/Taipei: 2000-01-21T12:40.
+  const SYNODIC_MS = 29.530588853 * MS_DAY;
+  const FULL_MOON_EPOCH_UTC = Date.UTC(2000, 0, 21, 4, 40, 0);
+
+  const MARKET_DATA = window.HERMES_MARKET_DATA || { meta: [], bars: {}, table: 'missing' };
+  const CALIBRATION_DATA = window.HERMES_DELTA_CALIBRATIONS || { data: {}, statusCounts: {} };
+  const DEFAULT_CALIBRATION_ANCHORS = {
+    stdAnchorMs: Date.UTC(1991, 0, 1),
+    stdAnchorColor: 'R',
+    moonAnchorMs: FULL_MOON_EPOCH_UTC,
+    moonAnchorColor: 'R'
+  };
+  const CALIBRATION_ANCHORS = { ...DEFAULT_CALIBRATION_ANCHORS, ...(CALIBRATION_DATA.anchors || {}) };
+  const MARKET_META = (MARKET_DATA.meta || []).map(row => ({
+    symbol: String(row[0]),
+    name: String(row[1] || row[0]),
+    market: String(row[2] || ''),
+    industry: String(row[3] || ''),
+    minDate: String(row[4] || ''),
+    maxDate: String(row[5] || ''),
+    rows: Number(row[6] || 0),
+  }));
+  const MARKET_BY_SYMBOL = new Map(MARKET_META.map(item => [item.symbol, item]));
+  const CALIBRATIONS_BY_SYMBOL = CALIBRATION_DATA.data || {};
+  const TEMPLATE_COLOR_OVERRIDES = {
+    '2327': 'O',
+    '6446': 'B'
+  };
+
+  function templateColorForSymbol(symbol, shift = 0) {
+    if (TEMPLATE_COLOR_OVERRIDES[symbol]) return TEMPLATE_COLOR_OVERRIDES[symbol];
+    const digits = Number(String(symbol).replace(/\D/g, '')) || 0;
+    return COLORS[mod(digits + shift, COLORS.length)];
+  }
+
+  function calibrationForSymbol(symbol) {
+    return CALIBRATIONS_BY_SYMBOL[String(symbol)] || null;
+  }
+
+  function cloneCalibratedTemplate(item) {
+    if (!item || !Array.isArray(item.tpl)) return null;
+    if (item.s === 'insufficient') return [];
+    return item.tpl.map(pt => ({
+      p: Number(pt.p),
+      color: pt.color,
+      offsetDays: Number(pt.offsetDays || 0),
+      role: pt.role === 'L' ? 'L' : 'H',
+      source: pt.source || 'calibrated'
+    }));
+  }
+
+  function templatesForSymbol(symbol) {
+    const calibration = calibrationForSymbol(symbol);
+    if (calibration?.t) {
+      const calibrated = { STD: [] };
+      VISIBLE_TFS.forEach(tf => {
+        const tpl = cloneCalibratedTemplate(calibration.t[tf]);
+        calibrated[tf] = tpl || [];
+      });
+      if (VISIBLE_TFS.every(tf => Array.isArray(calibrated[tf]))) return calibrated;
+    }
+    return {
+      STD: [],
+      ITD: genericTemplate('ITD', 10, templateColorForSymbol(symbol, 1), 0, 'sqlite-generic'),
+      MTD: genericTemplate('MTD', 10, templateColorForSymbol(symbol, 2), 0, 'sqlite-generic')
+    };
+  }
+
+  function calibrationLabel(status) {
+    if (status === 'calibrated') return '已校準';
+    if (status === 'weak') return '弱校準';
+    if (status === 'insufficient') return '資料不足';
+    return '未校準';
+  }
+
+  function worstCalibrationStatus(statuses) {
+    if (statuses.some(status => status === 'insufficient' || status === 'missing')) return 'insufficient';
+    if (statuses.some(status => status === 'weak')) return 'weak';
+    if (statuses.some(status => status === 'calibrated')) return 'calibrated';
+    return 'missing';
+  }
+
+  function activeDeltaTfs() {
+    return VISIBLE_TFS.filter(tf => el(`show${tf}`)?.checked);
+  }
+
+  function calibrationSummary(symbol) {
+    const c = calibrationForSymbol(symbol);
+    if (!c) return { status: 'missing', label: '未校準', text: '找不到此股票的 Delta 校準資料。' };
+    const activeTfs = activeDeltaTfs();
+    const activeText = activeTfs.length
+      ? activeTfs.map(tf => `${tf} ${calibrationLabel(c.t?.[tf]?.s)}`).join('、')
+      : '未勾選週期';
+    const activeStatuses = activeTfs.map(tf => c.t?.[tf]?.s || 'missing');
+    const tfText = VISIBLE_TFS.map(tf => {
+      const item = c.t?.[tf];
+      if (!item) return `${tf} 無資料`;
+      const score = Number(item.vs || 0).toFixed(2);
+      return `${tf} ${calibrationLabel(item.s)} 樣本外${score} 命中${item.mv || 0}/${item.ev || 0}`;
+    }).join('｜');
+    return {
+      status: activeStatuses.length ? worstCalibrationStatus(activeStatuses) : 'missing',
+      label: activeText,
+      text: `Delta 校準：目前顯示：${activeText}｜全部：${tfText}`
+    };
+  }
+
+  let state = {
+    candles: [],
+    rawDaily: [],
+    assetKey: MARKET_BY_SYMBOL.has('6446') ? '6446' : (MARKET_META[0]?.symbol || ''),
+    universe: 'hermes',
+    barTf: '1d',
+    customTemplates: null,
+    events: [],
+    grids: [],
+    chart: null,
+    candleSeries: null,
+    volumeSeries: null,
+    activeSourceLabel: '',
+  };
+
+  const el = id => document.getElementById(id);
+
+  function genericTemplate(tf, nPoints, p1Color = 'R', p1OffsetDays = 0, source = 'generic') {
+    const lineSpacing = tf === 'STD' ? 1 : (tf === 'ITD' ? 29.530588853 : 29.530588853 * 3);
+    const p1Idx = COLORS.indexOf(p1Color);
+    const out = [];
+    for (let i = 0; i < nPoints; i++) {
+      const phase = i / nPoints * 4;
+      const colorIdx = (p1Idx + Math.floor(phase)) % 4;
+      const offset = (phase - Math.floor(phase)) * lineSpacing + (i === 0 ? p1OffsetDays : 0);
+      out.push({ p: i + 1, color: COLORS[colorIdx], offsetDays: round(offset, 3), source });
+    }
+    return out;
+  }
+
+  function round(v, n = 2) { const m = Math.pow(10, n); return Math.round(v * m) / m; }
+  function mod(n, m) { return ((n % m) + m) % m; }
+  function lwTime(ms) { return Math.floor(ms / 1000); }
+  function fromLW(t) { return t * 1000; }
+  function utcDay(ms) { const d = new Date(ms); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); }
+  function ymd(ms) {
+    const d = new Date(ms);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const da = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}${m}${da}`;
+  }
+  function fmt(ms, withTime = true) {
+    const opts = withTime
+      ? { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }
+      : { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' };
+    return new Intl.DateTimeFormat('zh-TW', opts).format(new Date(ms));
+  }
+  function fmtAxis(sec, tf) {
+    const ms = sec * 1000;
+    return fmt(ms, tf !== '1d').replace(/^\d{4}\//, '');
+  }
+  function parseLocalDateInput(value) {
+    if (!value) return Date.UTC(1991,0,1);
+    return Date.parse(value + 'T00:00:00Z');
+  }
+  function parseLocalDateTimeInput(value) {
+    if (!value) return FULL_MOON_EPOCH_UTC;
+    // datetime-local is interpreted as Asia/Taipei wall time here.
+    const [datePart, timePart = '00:00'] = value.split('T');
+    const [y,m,d] = datePart.split('-').map(Number);
+    const [hh,mm] = timePart.split(':').map(Number);
+    // Asia/Taipei = UTC+8. Convert to UTC.
+    return Date.UTC(y, m-1, d, hh - 8, mm || 0, 0);
+  }
+
+  function getAsset() {
+    const meta = MARKET_BY_SYMBOL.get(state.assetKey) || MARKET_META[0];
+    if (!meta) {
+      return {
+        symbol: '',
+        name: '尚未載入股票資料',
+        group: 'Local',
+        kind: 'local-tw-stock',
+        templates: templatesForSymbol('0')
+      };
+    }
+    return {
+      symbol: meta.symbol,
+      name: `${meta.name}｜${meta.symbol}`,
+      displayName: meta.name,
+      market: meta.market,
+      industry: meta.industry,
+      minDate: meta.minDate,
+      maxDate: meta.maxDate,
+      rows: meta.rows,
+      calibration: calibrationForSymbol(meta.symbol),
+      kind: 'local-tw-stock',
+      templates: templatesForSymbol(meta.symbol)
+    };
+  }
+
+  function populateAssets() {
+    state.universe = 'hermes';
+    if (!MARKET_BY_SYMBOL.has(state.assetKey) && MARKET_META.length) state.assetKey = MARKET_META[0].symbol;
+    renderSelectedAsset();
+    renderStockResults('');
+    updateTemplateText();
+    adjustSourceOptions();
+  }
+
+  function adjustSourceOptions() {
+    const src = el('primarySource');
+    if (src) src.value = 'local';
+  }
+
+  function normalizeSearch(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  function stockSearchScore(item, query) {
+    if (!query) return item.symbol === state.assetKey ? -10 : 1000 - Math.min(item.rows, 999);
+    const symbol = item.symbol.toLowerCase();
+    const name = item.name.toLowerCase();
+    if (symbol === query) return 0;
+    if (symbol.startsWith(query)) return 1;
+    if (name === query) return 2;
+    if (name.includes(query)) return 3;
+    if (symbol.includes(query)) return 4;
+    return Infinity;
+  }
+
+  function renderSelectedAsset() {
+    const box = el('selectedAsset');
+    if (!box) return;
+    syncAnchorControls();
+    const asset = getAsset();
+    if (!asset.symbol) {
+      box.textContent = '找不到本機市場資料。請確認 delta_market_data.js 是否與 HTML 放在同一個資料夾。';
+      return;
+    }
+    const cal = calibrationSummary(asset.symbol);
+    box.innerHTML = `<b>${escapeHtml(asset.displayName)}｜${escapeHtml(asset.symbol)}</b><br>${escapeHtml(asset.market || 'TW')}｜${escapeHtml(asset.minDate)} ~ ${escapeHtml(asset.maxDate)}｜${asset.rows} 根日 K<br>${escapeHtml(cal.text)}`;
+  }
+
+  function renderStockResults(rawQuery) {
+    const list = el('stockResults');
+    if (!list) return;
+    const query = normalizeSearch(rawQuery);
+    const rows = MARKET_META
+      .map(item => ({ item, score: stockSearchScore(item, query) }))
+      .filter(x => Number.isFinite(x.score))
+      .sort((a, b) => a.score - b.score || a.item.symbol.localeCompare(b.item.symbol))
+      .slice(0, 40);
+    if (!rows.length) {
+      list.innerHTML = `<div class="small" style="padding:10px 12px;">找不到符合「${escapeHtml(rawQuery)}」的股票。</div>`;
+      return;
+    }
+    list.innerHTML = rows.map(({ item }) => `
+      <button type="button" class="stockResult${item.symbol === state.assetKey ? ' active' : ''}" data-symbol="${escapeHtml(item.symbol)}">
+        <span class="symbol">${escapeHtml(item.symbol)}</span>
+        <span class="name">${escapeHtml(item.name)}</span>
+        <span class="meta">${escapeHtml(item.market)}｜${item.rows}K</span>
+      </button>
+    `).join('');
+  }
+
+  function selectStock(symbol, shouldLoad = true) {
+    if (!MARKET_BY_SYMBOL.has(symbol)) return;
+    state.assetKey = symbol;
+    state.customTemplates = null;
+    state.barTf = '1d';
+    el('barTf').value = '1d';
+    renderSelectedAsset();
+    updateTemplateText();
+    renderStockResults(el('stockSearch')?.value || '');
+    if (shouldLoad) loadData();
+    else renderAll();
+  }
+
+  function getTemplates() {
+    if (state.customTemplates) return state.customTemplates;
+    return JSON.parse(JSON.stringify(getAsset().templates));
+  }
+  function updateTemplateText() {
+    const templates = state.customTemplates || getAsset().templates;
+    const visibleTemplates = Object.fromEntries(VISIBLE_TFS.map(tf => [tf, templates[tf] || []]));
+    el('templateJson').value = JSON.stringify(visibleTemplates, null, 2);
+    syncAnchorControls();
+  }
+
+  function isUsingCalibration() {
+    return !state.customTemplates && Boolean(calibrationForSymbol(state.assetKey));
+  }
+
+  function syncAnchorControls() {
+    const locked = isUsingCalibration();
+    ['stdAnchor','stdAnchorColor','moonAnchor','moonAnchorColor'].forEach(id => {
+      const node = el(id);
+      if (node) node.disabled = locked;
+    });
+  }
+
+  function settings() {
+    const useCalibrationAnchors = isUsingCalibration();
+    return {
+      stdAnchorMs: useCalibrationAnchors ? Number(CALIBRATION_ANCHORS.stdAnchorMs) : parseLocalDateInput(el('stdAnchor').value),
+      stdAnchorColor: useCalibrationAnchors ? CALIBRATION_ANCHORS.stdAnchorColor : el('stdAnchorColor').value,
+      moonAnchorMs: useCalibrationAnchors ? Number(CALIBRATION_ANCHORS.moonAnchorMs) : parseLocalDateTimeInput(el('moonAnchor').value),
+      moonAnchorColor: useCalibrationAnchors ? CALIBRATION_ANCHORS.moonAnchorColor : el('moonAnchorColor').value,
+      p2Role: el('p2Role').value,
+      flipRole: el('flipRole').value === '1',
+      show: {
+        STD: false,
+        ITD: el('showITD').checked,
+        MTD: el('showMTD').checked,
+        grid: el('showGrid').checked,
+        window: el('showWindow').checked,
+      }
+    };
+  }
+
+  function timeframeCalibrationStatus(symbol, tf) {
+    if (state.customTemplates) return 'custom';
+    return calibrationForSymbol(symbol)?.t?.[tf]?.s || 'missing';
+  }
+
+  function colorIndex(c) { return COLORS.indexOf(c); }
+
+  function stdColorForDate(ms, s = settings()) {
+    const d0 = utcDay(ms);
+    const a0 = utcDay(s.stdAnchorMs);
+    const days = Math.floor((d0 - a0) / MS_DAY);
+    const idx = mod(colorIndex(s.stdAnchorColor) + days, 4);
+    return COLORS[idx];
+  }
+
+  function generateFullMoons(startMs, endMs) {
+    const out = [];
+    let n = Math.floor((startMs - FULL_MOON_EPOCH_UTC) / SYNODIC_MS) - 3;
+    for (; ; n++) {
+      const t = FULL_MOON_EPOCH_UTC + n * SYNODIC_MS;
+      if (t > endMs + SYNODIC_MS * 3) break;
+      if (t >= startMs - SYNODIC_MS * 3) out.push({ time: t, moonIndex: n });
+    }
+    return out;
+  }
+
+  function colorForMoonIndex(moonIndex, s) {
+    const anchorIdx = Math.round((s.moonAnchorMs - FULL_MOON_EPOCH_UTC) / SYNODIC_MS);
+    return COLORS[mod(colorIndex(s.moonAnchorColor) + (moonIndex - anchorIdx), 4)];
+  }
+  function colorForMtdLine(moonIndex, s) {
+    const anchorIdx = Math.round((s.moonAnchorMs - FULL_MOON_EPOCH_UTC) / SYNODIC_MS);
+    const step = Math.round((moonIndex - anchorIdx) / 3);
+    return COLORS[mod(colorIndex(s.moonAnchorColor) + step, 4)];
+  }
+
+  function generateGrid(tf, startMs, endMs, s = settings()) {
+    const grids = [];
+    if (tf === 'STD') {
+      let t = utcDay(startMs - 5 * MS_DAY);
+      while (t <= endMs + 5 * MS_DAY) {
+        grids.push({ time: t, color: stdColorForDate(t, s), tf: 'STD', label: 'STD day color' });
+        t += MS_DAY;
+      }
+    } else if (tf === 'ITD') {
+      generateFullMoons(startMs, endMs).forEach(m => grids.push({ time: m.time, color: colorForMoonIndex(m.moonIndex, s), tf: 'ITD', label: 'Full moon line' }));
+    } else if (tf === 'MTD') {
+      const anchorIdx = Math.round((s.moonAnchorMs - FULL_MOON_EPOCH_UTC) / SYNODIC_MS);
+      generateFullMoons(startMs, endMs).forEach(m => {
+        if (mod(m.moonIndex - anchorIdx, 3) === 0) grids.push({ time: m.time, color: colorForMtdLine(m.moonIndex, s), tf: 'MTD', label: 'Every 3rd full moon line' });
+      });
+    }
+    return grids.sort((a,b) => a.time - b.time);
+  }
+
+  function roleForPoint(p, s = settings()) {
+    let role;
+    if (p === 1) role = s.p2Role === 'H' ? 'L' : 'H';
+    else {
+      const steps = p - 2;
+      role = (steps % 2 === 0) ? s.p2Role : (s.p2Role === 'H' ? 'L' : 'H');
+    }
+    if (s.flipRole) role = role === 'H' ? 'L' : 'H';
+    return role;
+  }
+
+  function windowDays(tf) {
+    if (tf === 'STD') return state.barTf === '4h' ? 0.25 : 1;
+    if (tf === 'ITD') return 3;
+    return 10;
+  }
+
+  function generateEvents(tf, startMs, endMs, s = settings()) {
+    const templates = getTemplates();
+    const tpl = templates[tf] || [];
+    const grids = generateGrid(tf, startMs - 120 * MS_DAY, endMs + 120 * MS_DAY, s);
+    const events = [];
+    grids.forEach(g => {
+      tpl.forEach(pt => {
+        if (pt.color !== g.color) return;
+        const t = g.time + Number(pt.offsetDays || 0) * MS_DAY;
+        if (t >= startMs - 30 * MS_DAY && t <= endMs + 30 * MS_DAY) {
+          const role = pt.role === 'H' || pt.role === 'L' ? pt.role : roleForPoint(Number(pt.p), s);
+          events.push({
+            time: t,
+            tf,
+            p: Number(pt.p),
+            color: pt.color,
+            offsetDays: Number(pt.offsetDays || 0),
+            role,
+            source: pt.source || 'custom',
+            windowStart: t - windowDays(tf) * MS_DAY,
+            windowEnd: t + windowDays(tf) * MS_DAY,
+          });
+        }
+      });
+    });
+    return uniqueEvents(events).sort((a,b) => a.time - b.time || a.p - b.p);
+  }
+
+  function uniqueEvents(events) {
+    const seen = new Set();
+    return events.filter(ev => {
+      const key = [ev.tf, ev.p, Math.round(ev.time / 60000)].join('|');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function allActiveEvents(startMs, endMs) {
+    const s = settings();
+    let events = [];
+    VISIBLE_TFS.forEach(tf => {
+      if (s.show[tf]) events = events.concat(generateEvents(tf, startMs, endMs, s));
+    });
+    return events.sort((a,b) => a.time - b.time);
+  }
+
+  async function loadData() {
+    const asset = getAsset();
+    state.barTf = el('barTf').value;
+    const lookbackDays = Math.min(730, Number(el('lookback').value));
+    const end = Date.now();
+    const start = end - lookbackDays * MS_DAY;
+    setStatus('dataStatus', '載入中：正在抓 K 線並做資料檢查……', 'warn');
+    let candles = [];
+    let verify = { status: 'warn', message: '尚未驗證。' };
+    let sourceLabel = '';
+
+    try {
+      const src = el('primarySource').value;
+      if (asset.kind === 'local-tw-stock') {
+        state.barTf = '1d';
+        el('barTf').value = '1d';
+        candles = loadEmbeddedCandles(asset.symbol, start, end);
+        sourceLabel = `Hermes SQLite ${MARKET_DATA.table || 'daily_bars_adjusted'}`;
+        const cal = calibrationSummary(asset.symbol);
+        verify = {
+          status: cal.status === 'calibrated' ? 'good' : 'warn',
+          message: `本機資料：${asset.displayName || asset.name} ${asset.symbol}，資料範圍 ${asset.minDate || '-'} ~ ${asset.maxDate || '-'}。SQLite 資料包不需要 Yahoo/TWSE 網路請求。<br>${cal.text}`
+        };
+      } else if (asset.kind && asset.kind.startsWith('tw-')) {
+        try {
+          candles = await fetchYahoo(asset.yahoo, state.barTf, start, end);
+          sourceLabel = `Yahoo Chart ${asset.yahoo}`;
+          try {
+            const officialDaily = await fetchTaiwanOfficialDaily(asset, start, end);
+            if (state.barTf === '1d') {
+              verify = compareSeries(candles, officialDaily, Number(el('verifyTolerance').value));
+              verify.message = `TWSE 官方日線驗證：${verify.message}`;
+            } else {
+              const dailyFrom4h = aggregateToDaily(candles);
+              verify = compareSeries(dailyFrom4h, officialDaily, Number(el('verifyTolerance').value));
+              verify.message = `4H 由 Yahoo 1H 聚合，並用 TWSE 官方日線收盤交叉驗證：${verify.message}`;
+            }
+          } catch (e) {
+            verify = { status: 'warn', message: `主要來源已載入；TWSE 官方日線驗證失敗或被瀏覽器擋跨域：${e.message}` };
+          }
+        } catch (yahooError) {
+          const requestedTf = state.barTf;
+          candles = await fetchTaiwanOfficialDaily(asset, start, end);
+          if (requestedTf !== '1d') {
+            state.barTf = '1d';
+            el('barTf').value = '1d';
+          }
+          sourceLabel = `TWSE 官方日 K`;
+          verify = {
+            status: 'warn',
+            message: `Yahoo ${asset.yahoo} 載入失敗（${yahooError.message}），已改用 TWSE 官方日線。${requestedTf !== '1d' ? '4 小時 K 需要 Yahoo 1 小時資料，已自動切換為日 K。' : ''}`
+          };
+        }
+      } else if (asset.kind === 'crypto') {
+        const primary = src === 'kraken' ? 'kraken' : 'binance';
+        let primaryData;
+        if (primary === 'binance') {
+          primaryData = await fetchBinance(asset.binance, state.barTf, start, end);
+          sourceLabel = `Binance ${asset.binance}`;
+        } else {
+          primaryData = await fetchKraken(asset.kraken, state.barTf, start, end);
+          sourceLabel = `Kraken ${asset.kraken}`;
+        }
+        let secondData = [];
+        try {
+          secondData = primary === 'binance'
+            ? await fetchKraken(asset.kraken, state.barTf, start, end)
+            : await fetchBinance(asset.binance, state.barTf, start, end);
+          verify = compareSeries(primaryData, secondData, Number(el('verifyTolerance').value));
+        } catch (e) {
+          verify = { status: 'warn', message: `主要來源已載入，但第二來源驗證失敗：${e.message}` };
+        }
+        candles = primaryData;
+      } else {
+        candles = await fetchYahoo(asset.yahoo, state.barTf, start, end);
+        sourceLabel = `Yahoo Chart ${asset.yahoo}`;
+      }
+      if (!candles.length) throw new Error('沒有取得任何 K 線資料');
+      candles = cleanCandles(candles).filter(c => c.time >= start && c.time <= end);
+      state.candles = candles;
+      state.activeSourceLabel = sourceLabel;
+      state.rawDaily = state.barTf === '1d' ? candles : aggregateToDaily(candles);
+      renderAll();
+      const statusClass = verify.status === 'good' ? 'good' : verify.status === 'bad' ? 'bad' : 'warn';
+      setStatus('dataStatus', `完成：${sourceLabel}，${candles.length} 根 K 線。<br>${verify.message}`, statusClass);
+    } catch (e) {
+      console.error(e);
+      const sample = generateSampleCandles(start, end, state.barTf);
+      state.candles = sample;
+      state.rawDaily = state.barTf === '1d' ? sample : aggregateToDaily(sample);
+      state.activeSourceLabel = '示範資料';
+      renderAll();
+      setStatus('dataStatus', `資料抓取失敗：${escapeHtml(e.message)}<br>已載入「示範資料」讓介面可操作；請改用 CSV 或換資料來源。`, 'bad');
+    }
+  }
+
+  function setStatus(id, html, klass = '') {
+    const box = el(id);
+    box.className = 'status' + (klass ? ' ' + klass : '');
+    box.innerHTML = html;
+  }
+
+  function loadEmbeddedCandles(symbol, startMs, endMs) {
+    const rows = MARKET_DATA.bars?.[symbol] || [];
+    return cleanCandles(rows.map(row => ({
+      time: Date.parse(`${row[0]}T00:00:00Z`),
+      open: Number(row[1]),
+      high: Number(row[2]),
+      low: Number(row[3]),
+      close: Number(row[4]),
+      volume: Number(row[5] || 0)
+    }))).filter(c => c.time >= startMs && c.time <= endMs);
+  }
+
+  async function fetchBinance(symbol, tf, startMs, endMs) {
+    const interval = tf === '4h' ? '4h' : '1d';
+    const out = [];
+    let cursor = startMs;
+    let guard = 0;
+    while (cursor < endMs && guard++ < 20) {
+      const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&startTime=${Math.floor(cursor)}&endTime=${Math.floor(endMs)}&limit=1000`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
+      const rows = await res.json();
+      if (!Array.isArray(rows) || rows.length === 0) break;
+      rows.forEach(r => out.push({ time: Number(r[0]), open: +r[1], high: +r[2], low: +r[3], close: +r[4], volume: +r[5] }));
+      const last = Number(rows[rows.length - 1][0]);
+      const next = last + (tf === '4h' ? 4 * 3600 * 1000 : MS_DAY);
+      if (next <= cursor) break;
+      cursor = next;
+    }
+    return cleanCandles(out);
+  }
+
+  async function fetchKraken(pair, tf, startMs, endMs) {
+    const interval = tf === '4h' ? 240 : 1440;
+    const out = [];
+    let since = Math.floor(startMs / 1000);
+    let guard = 0;
+    while (since * 1000 < endMs && guard++ < 20) {
+      const url = `https://api.kraken.com/0/public/OHLC?pair=${encodeURIComponent(pair)}&interval=${interval}&since=${since}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Kraken HTTP ${res.status}`);
+      const json = await res.json();
+      if (json.error && json.error.length) throw new Error(json.error.join(', '));
+      const key = Object.keys(json.result || {}).find(k => k !== 'last');
+      if (!key) break;
+      const rows = json.result[key];
+      if (!Array.isArray(rows) || rows.length === 0) break;
+      rows.forEach(r => {
+        const t = Number(r[0]) * 1000;
+        if (t >= startMs && t <= endMs) out.push({ time: t, open: +r[1], high: +r[2], low: +r[3], close: +r[4], volume: +r[6] });
+      });
+      const last = Number(json.result.last || rows[rows.length - 1][0]);
+      if (!last || last <= since) break;
+      since = last + 1;
+    }
+    return cleanCandles(out);
+  }
+
+  async function fetchYahoo(symbol, tf, startMs, endMs) {
+    const sec1 = Math.floor(startMs / 1000);
+    const sec2 = Math.floor(endMs / 1000);
+    const interval = tf === '4h' ? '1h' : '1d';
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${sec1}&period2=${sec2}&interval=${interval}&includePrePost=true&events=history`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Yahoo HTTP ${res.status}`);
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    const err = json?.chart?.error;
+    if (err) throw new Error(err.description || 'Yahoo chart error');
+    if (!result || !result.timestamp) throw new Error('Yahoo 無有效資料');
+    const q = result.indicators?.quote?.[0];
+    const rows = result.timestamp.map((ts, i) => ({
+      time: ts * 1000,
+      open: q.open[i], high: q.high[i], low: q.low[i], close: q.close[i], volume: q.volume?.[i] || 0
+    })).filter(c => [c.open,c.high,c.low,c.close].every(Number.isFinite));
+    const clean = cleanCandles(rows);
+    return tf === '4h' ? aggregateTo4h(clean) : clean;
+  }
+
+  async function fetchTaiwanOfficialDaily(asset, startMs, endMs) {
+    const months = monthStarts(startMs, endMs);
+    const out = [];
+    for (const m of months) {
+      try {
+        const rows = asset.official === 'twse-index'
+          ? await fetchTwseIndexMonth(m)
+          : await fetchTwseStockMonth(asset.stockNo, m);
+        out.push(...rows);
+        await sleep(80);
+      } catch (e) {
+        // keep trying other months; throw only if nothing was retrieved
+        console.warn('official month fetch failed', asset.stockNo || asset.official, fmt(m, false), e);
+      }
+    }
+    const clean = cleanCandles(out).filter(c => c.time >= startMs - 3 * MS_DAY && c.time <= endMs + 3 * MS_DAY);
+    if (!clean.length) throw new Error('官方日線沒有取得有效資料');
+    return clean.map(c => ({ ...c, time: utcDay(c.time) }));
+  }
+
+  async function fetchTwseStockMonth(stockNo, monthMs) {
+    const date = ymd(monthMs);
+    const urls = [
+      `https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=${date}&stockNo=${encodeURIComponent(stockNo)}&response=json`,
+      `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${date}&stockNo=${encodeURIComponent(stockNo)}`
+    ];
+    const json = await fetchFirstJson(urls);
+    const rows = json.data || json.tables?.[0]?.data || [];
+    return rows.map(r => {
+      const dateRaw = r[0];
+      return {
+        time: parseTaiwanMarketDate(dateRaw),
+        open: parseTwNumber(r[3]),
+        high: parseTwNumber(r[4]),
+        low: parseTwNumber(r[5]),
+        close: parseTwNumber(r[6]),
+        volume: parseTwNumber(r[1])
+      };
+    }).filter(c => Number.isFinite(c.time) && [c.open,c.high,c.low,c.close].every(Number.isFinite));
+  }
+
+  async function fetchTwseIndexMonth(monthMs) {
+    const date = ymd(monthMs);
+    const urls = [
+      `https://www.twse.com.tw/rwd/zh/TAIEX/MI_5MINS_HIST?date=${date}&response=json`,
+      `https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date=${date}`
+    ];
+    const json = await fetchFirstJson(urls);
+    const rows = json.data || json.tables?.[0]?.data || [];
+    return rows.map(r => ({
+      time: parseTaiwanMarketDate(r[0]),
+      open: parseTwNumber(r[1]),
+      high: parseTwNumber(r[2]),
+      low: parseTwNumber(r[3]),
+      close: parseTwNumber(r[4]),
+      volume: 0
+    })).filter(c => Number.isFinite(c.time) && [c.open,c.high,c.low,c.close].every(Number.isFinite));
+  }
+
+  async function fetchFirstJson(urls) {
+    let lastErr = null;
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (json && (json.data || json.tables)) return json;
+        throw new Error(json?.stat || json?.msgArray?.join(', ') || '官方回傳無 data');
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('官方來源無法讀取');
+  }
+
+  function monthStarts(startMs, endMs) {
+    const out = [];
+    const d = new Date(startMs);
+    let y = d.getUTCFullYear(), m = d.getUTCMonth();
+    while (Date.UTC(y, m, 1) <= endMs) {
+      out.push(Date.UTC(y, m, 1));
+      m += 1;
+      if (m > 11) { m = 0; y += 1; }
+    }
+    return out;
+  }
+
+  function parseTaiwanMarketDate(raw) {
+    const s = String(raw || '').trim();
+    const parts = s.split(/[\/\-]/).map(x => x.trim());
+    if (parts.length >= 3) {
+      let y = Number(parts[0]);
+      const m = Number(parts[1]);
+      const d = Number(parts[2]);
+      if (y < 1911) y += 1911;
+      return Date.UTC(y, m - 1, d);
+    }
+    const t = Date.parse(s);
+    return Number.isFinite(t) ? utcDay(t) : NaN;
+  }
+
+  function parseTwNumber(x) {
+    const s = String(x ?? '').replace(/,/g, '').replace(/--/g, '').trim();
+    const n = Number(s);
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  async function fetchStooqDaily(symbol, startMs, endMs) {
+    const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(symbol)}&d1=${ymd(startMs)}&d2=${ymd(endMs)}&i=d`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Stooq HTTP ${res.status}`);
+    const text = await res.text();
+    if (!text.includes(',')) throw new Error('Stooq 回傳格式不是 CSV');
+    return parseCsv(text).map(c => ({ ...c, time: utcDay(c.time) }));
+  }
+
+  function parseCsv(text) {
+    const lines = text.trim().split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const getIdx = names => names.map(n => headers.indexOf(n)).find(i => i >= 0);
+    const iTime = getIdx(['time','timestamp','date','datetime']);
+    const iOpen = getIdx(['open']);
+    const iHigh = getIdx(['high']);
+    const iLow = getIdx(['low']);
+    const iClose = getIdx(['close','adj close','adjclose']);
+    const iVol = getIdx(['volume','vol']);
+    if ([iTime,iOpen,iHigh,iLow,iClose].some(i => i == null || i < 0)) throw new Error('CSV 欄位不足');
+    const out = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = splitCsvLine(lines[i]);
+      const rawTime = cols[iTime];
+      let t;
+      if (/^\d{10,13}$/.test(rawTime)) t = Number(rawTime.length === 13 ? rawTime : Number(rawTime) * 1000);
+      else t = Date.parse(rawTime.includes('T') ? rawTime : rawTime + 'T00:00:00Z');
+      const c = { time: t, open: +cols[iOpen], high: +cols[iHigh], low: +cols[iLow], close: +cols[iClose], volume: iVol >= 0 ? +cols[iVol] : 0 };
+      if (Number.isFinite(c.time) && [c.open,c.high,c.low,c.close].every(Number.isFinite)) out.push(c);
+    }
+    return cleanCandles(out);
+  }
+
+  function splitCsvLine(line) {
+    const out = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') inQ = !inQ;
+      else if (ch === ',' && !inQ) { out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+    out.push(cur);
+    return out.map(s => s.trim().replace(/^"|"$/g, ''));
+  }
+
+  function cleanCandles(rows) {
+    const map = new Map();
+    rows.forEach(c => {
+      if (!c || !Number.isFinite(c.time)) return;
+      if (![c.open,c.high,c.low,c.close].every(Number.isFinite)) return;
+      map.set(Number(c.time), { time: Number(c.time), open: +c.open, high: +c.high, low: +c.low, close: +c.close, volume: +(c.volume || 0) });
+    });
+    return [...map.values()].sort((a,b) => a.time - b.time);
+  }
+
+  function aggregateTo4h(rows) {
+    const groups = new Map();
+    rows.forEach(c => {
+      const bucket = Math.floor(c.time / (4 * 3600 * 1000)) * 4 * 3600 * 1000;
+      if (!groups.has(bucket)) groups.set(bucket, []);
+      groups.get(bucket).push(c);
+    });
+    return [...groups.entries()].sort((a,b) => a[0]-b[0]).map(([time, arr]) => ({
+      time, open: arr[0].open, high: Math.max(...arr.map(x => x.high)), low: Math.min(...arr.map(x => x.low)), close: arr[arr.length - 1].close, volume: arr.reduce((s,x) => s + (x.volume || 0), 0)
+    }));
+  }
+
+  function aggregateToDaily(rows) {
+    const groups = new Map();
+    rows.forEach(c => {
+      const bucket = utcDay(c.time);
+      if (!groups.has(bucket)) groups.set(bucket, []);
+      groups.get(bucket).push(c);
+    });
+    return [...groups.entries()].sort((a,b) => a[0]-b[0]).map(([time, arr]) => ({
+      time, open: arr[0].open, high: Math.max(...arr.map(x => x.high)), low: Math.min(...arr.map(x => x.low)), close: arr[arr.length - 1].close, volume: arr.reduce((s,x) => s + (x.volume || 0), 0)
+    }));
+  }
+
+  function compareSeries(a, b, tolerance) {
+    const bMap = new Map(b.map(c => [Math.round(c.time / 1000), c]));
+    const diffs = [];
+    a.forEach(c => {
+      const key = Math.round(c.time / 1000);
+      const match = bMap.get(key) || bMap.get(Math.round(utcDay(c.time) / 1000));
+      if (match && match.close && c.close) diffs.push(Math.abs(c.close - match.close) / ((c.close + match.close) / 2));
+    });
+    if (!diffs.length) return { status: 'warn', message: '第二來源有資料，但找不到可對齊的時間點。' };
+    const avg = diffs.reduce((s,x)=>s+x,0) / diffs.length;
+    const max = Math.max(...diffs);
+    const status = max <= tolerance ? 'good' : (avg <= tolerance ? 'warn' : 'bad');
+    return { status, message: `交叉驗證 ${diffs.length} 個重疊點；平均差 ${pct(avg)}，最大差 ${pct(max)}。` };
+  }
+
+  function pct(x) { return (x * 100).toFixed(2) + '%'; }
+
+  function generateSampleCandles(startMs, endMs, tf) {
+    const step = tf === '4h' ? 4 * 3600 * 1000 : MS_DAY;
+    const out = [];
+    let price = 100;
+    let t = Math.floor(startMs / step) * step;
+    while (t <= endMs) {
+      const drift = Math.sin((t - startMs) / MS_DAY / 16) * 0.45;
+      const rnd = (Math.random() - .48) * 1.8;
+      const open = price;
+      const close = Math.max(1, open + drift + rnd);
+      const high = Math.max(open, close) + Math.random() * 1.4;
+      const low = Math.min(open, close) - Math.random() * 1.4;
+      out.push({ time: t, open, high, low, close, volume: 1000 + Math.random()*5000 });
+      price = close;
+      t += step;
+    }
+    return out;
+  }
+
+  function initChart() {
+    if (!window.LightweightCharts) {
+      el('chart').innerHTML = '<div class="status bad" style="margin:16px;">Chart library 載入失敗。請確認網路或 CDN。</div>';
+      return;
+    }
+    const chartEl = el('chart');
+    state.chart = LightweightCharts.createChart(chartEl, {
+      layout: { background: { color: 'transparent' }, textColor: '#cbd5e1' },
+      grid: { vertLines: { color: 'rgba(148,163,184,.08)' }, horzLines: { color: 'rgba(148,163,184,.08)' } },
+      timeScale: {
+        borderColor: 'rgba(148,163,184,.24)',
+        timeVisible: true,
+        secondsVisible: false,
+        tickMarkFormatter: (time) => fmtAxis(Number(time), state.barTf),
+      },
+      rightPriceScale: { borderColor: 'rgba(148,163,184,.24)' },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      localization: { timeFormatter: (time) => fmt(Number(time) * 1000, state.barTf !== '1d') },
+      handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+    });
+    state.candleSeries = state.chart.addCandlestickSeries({
+      upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
+      wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+    });
+    state.volumeSeries = state.chart.addHistogramSeries({ priceScaleId: '', priceFormat: { type: 'volume' }, color: 'rgba(148,163,184,.28)' });
+    state.volumeSeries.priceScale().applyOptions({ scaleMargins: { top: .82, bottom: 0 } });
+    state.chart.timeScale().subscribeVisibleTimeRangeChange(() => { renderOverlays(); updateVisibleLabel(); });
+    state.chart.subscribeCrosshairMove(showTooltip);
+    new ResizeObserver(() => {
+      const rect = chartEl.getBoundingClientRect();
+      state.chart.resize(rect.width, rect.height);
+      renderOverlays();
+    }).observe(chartEl);
+  }
+
+  function renderAll() {
+    renderChart();
+    renderCycleCards();
+    renderEventTable();
+    renderOverlays();
+  }
+
+  function renderChart() {
+    if (!state.chart || !state.candleSeries) return;
+    const asset = getAsset();
+    el('chartTitle').textContent = `${asset.name}｜${state.barTf === '4h' ? '4 小時 K' : '日 K'}｜${state.activeSourceLabel}`;
+    const data = state.candles.map(c => ({ time: lwTime(c.time), open: c.open, high: c.high, low: c.low, close: c.close }));
+    state.candleSeries.setData(data);
+    state.volumeSeries.setData(state.candles.map(c => ({ time: lwTime(c.time), value: c.volume || 0, color: c.close >= c.open ? 'rgba(34,197,94,.18)' : 'rgba(239,68,68,.18)' })));
+
+    const start = state.candles[0]?.time || Date.now() - 180 * MS_DAY;
+    const end = state.candles[state.candles.length - 1]?.time || Date.now();
+    state.events = allActiveEvents(start, end + 60 * MS_DAY);
+    const markers = state.events
+      .filter(ev => ev.time >= start - 10 * MS_DAY && ev.time <= end + 10 * MS_DAY)
+      .slice(-1000)
+      .map(ev => ({
+        time: lwTime(nearestCandleTime(ev.time) || ev.time),
+        position: ev.role === 'H' ? 'aboveBar' : 'belowBar',
+        color: COLOR_META[ev.color].css,
+        shape: ev.role === 'H' ? 'arrowDown' : 'arrowUp',
+        text: `${ev.tf} P${ev.p}${ev.role}`,
+        size: 1,
+      }));
+    state.candleSeries.setMarkers(markers);
+    state.chart.timeScale().fitContent();
+    updateVisibleLabel();
+  }
+
+  function nearestCandleTime(ms) {
+    if (!state.candles.length) return null;
+    let lo = 0, hi = state.candles.length - 1;
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (state.candles[mid].time < ms) lo = mid + 1; else hi = mid;
+    }
+    return state.candles[lo]?.time || state.candles[state.candles.length - 1].time;
+  }
+
+  function renderOverlays() {
+    const overlay = el('eventOverlay');
+    overlay.innerHTML = '';
+    if (!state.chart || !state.candles.length) return;
+    const s = settings();
+    const range = state.chart.timeScale().getVisibleRange();
+    if (!range) return;
+    const startMs = fromLW(Number(range.from));
+    const endMs = fromLW(Number(range.to));
+    const visibleEvents = state.events.filter(ev => ev.time >= startMs - 30 * MS_DAY && ev.time <= endMs + 30 * MS_DAY);
+    if (s.show.window) {
+      visibleEvents.forEach(ev => {
+        const x1 = coordinateForTime(ev.windowStart);
+        const x2 = coordinateForTime(ev.windowEnd);
+        if (x1 == null || x2 == null) return;
+        const b = document.createElement('div');
+        b.className = 'band';
+        b.style.left = Math.min(x1, x2) + 'px';
+        b.style.width = Math.max(1, Math.abs(x2 - x1)) + 'px';
+        b.style.background = COLOR_META[ev.color].css;
+        overlay.appendChild(b);
+      });
+    }
+    if (s.show.grid) {
+      let grids = [];
+      VISIBLE_TFS.forEach(tf => { if (s.show[tf]) grids = grids.concat(generateGrid(tf, startMs, endMs, s)); });
+      grids.forEach(g => addVLine(overlay, g.time, COLOR_META[g.color].css, `${g.tf}-${g.color}`, .35));
+    }
+    visibleEvents.forEach(ev => addVLine(overlay, ev.time, COLOR_META[ev.color].css, `${ev.tf} P${ev.p}${ev.role}`, .85));
+  }
+
+  function coordinateForTime(timeMs) {
+    const direct = state.chart.timeScale().timeToCoordinate(lwTime(timeMs));
+    if (direct != null && Number.isFinite(direct)) return direct;
+    const nearest = nearestCandleTime(timeMs);
+    return nearest == null ? null : state.chart.timeScale().timeToCoordinate(lwTime(nearest));
+  }
+
+  function addVLine(parent, timeMs, color, label, opacity = .75) {
+    const x = coordinateForTime(timeMs);
+    if (x == null || !Number.isFinite(x)) return;
+    const line = document.createElement('div');
+    line.className = 'vline';
+    line.style.left = `${x}px`;
+    line.style.background = color;
+    line.style.opacity = opacity;
+    parent.appendChild(line);
+  }
+
+  function updateVisibleLabel() {
+    if (!state.chart) return;
+    const range = state.chart.timeScale().getVisibleRange();
+    if (!range) return;
+    el('visibleRange').textContent = `橫軸目前顯示：${fmt(fromLW(Number(range.from)), true)} ～ ${fmt(fromLW(Number(range.to)), true)}（Asia/Taipei）`;
+  }
+
+  function showTooltip(param) {
+    const tt = el('tooltip');
+    if (!param || !param.time || !param.point || param.point.x < 0 || param.point.y < 0) { tt.style.display = 'none'; return; }
+    const ms = fromLW(Number(param.time));
+    const c = state.candles.find(x => lwTime(x.time) === Number(param.time));
+    const tfMs = state.barTf === '4h' ? 4 * 3600 * 1000 : MS_DAY;
+    const nearby = state.events.filter(ev => Math.abs(ev.time - ms) <= Math.max(tfMs, windowDays(ev.tf) * MS_DAY)).slice(0, 5);
+    let html = `<b>${fmt(ms, true)}</b><br>區段：${fmt(ms, true)} ～ ${fmt(ms + tfMs, true)}`;
+    if (c) html += `<br>O ${num(c.open)} H ${num(c.high)} L ${num(c.low)} C ${num(c.close)}`;
+    if (nearby.length) html += '<br><br>' + nearby.map(ev => `${ev.tf} P${ev.p} ${ev.role === 'H' ? '預測高點' : '預測低點'}｜${COLOR_META[ev.color].zh}線 ${ev.offsetDays >= 0 ? '+' : ''}${ev.offsetDays}d`).join('<br>');
+    tt.innerHTML = html;
+    tt.style.left = Math.min(param.point.x + 18, el('chartWrap').clientWidth - 240) + 'px';
+    tt.style.top = Math.min(param.point.y + 18, el('chartWrap').clientHeight - 150) + 'px';
+    tt.style.display = 'block';
+  }
+
+  function num(x) { return Number(x).toLocaleString('en-US', { maximumFractionDigits: 4 }); }
+
+  function renderCycleCards() {
+    const box = el('cycleCards');
+    const now = Date.now();
+    const s = settings();
+    box.innerHTML = '';
+    VISIBLE_TFS.forEach(tf => {
+      const grids = generateGrid(tf, now - 400 * MS_DAY, now + 400 * MS_DAY, s);
+      const prevGrid = [...grids].reverse().find(g => g.time <= now);
+      const nextGrid = grids.find(g => g.time > now);
+      const events = generateEvents(tf, now - 120 * MS_DAY, now + 180 * MS_DAY, s);
+      const prevEv = [...events].reverse().find(ev => ev.time <= now);
+      const nextEv = events.find(ev => ev.time > now);
+      const card = document.createElement('div');
+      card.className = 'card';
+      const color = tf === 'STD' ? stdColorForDate(now, s) : (prevGrid?.color || 'R');
+      const nextTxt = nextEv ? `${fmt(nextEv.time, true)}｜P${nextEv.p} ${nextEv.role === 'H' ? '可能高點' : '可能低點'}` : '無資料';
+      const days = nextEv ? (nextEv.time - now) / MS_DAY : null;
+      const phase = prevGrid && nextGrid ? ((now - prevGrid.time) / (nextGrid.time - prevGrid.time) * 100) : 0;
+      card.innerHTML = `
+        <div class="title"><span>${tfLabel(tf)}</span><span class="badge"><span class="dot" style="background:${COLOR_META[color].css}"></span>${COLOR_META[color].zh}</span></div>
+        <div class="big">${nextEv ? `${days >= 0 ? '距下一轉折' : '已過'} ${Math.abs(days).toFixed(1)} 天` : '無轉折資料'}</div>
+        <div class="small">
+          現在位置：${prevGrid ? COLOR_META[prevGrid.color].zh + '線後' : ''} ${phase.toFixed(1)}%<br>
+          下一轉折：${nextTxt}<br>
+          前一轉折：${prevEv ? `${fmt(prevEv.time, true)}｜P${prevEv.p} ${prevEv.role}` : '無'}
+        </div>`;
+      box.appendChild(card);
+    });
+  }
+
+  function tfLabel(tf) {
+    return tf === 'ITD' ? 'ITD 中短期 Delta' : 'MTD 中期 Delta';
+  }
+
+  function renderEventTable() {
+    const tbody = el('eventTable').querySelector('tbody');
+    const now = Date.now();
+    const events = allActiveEvents(now - 20 * MS_DAY, now + 180 * MS_DAY).filter(ev => ev.time >= now - 3 * MS_DAY).slice(0, 80);
+    tbody.innerHTML = events.map(ev => {
+      const d = (ev.time - now) / MS_DAY;
+      const warn = Math.abs(d) <= windowDays(ev.tf) ? '正在窗口內' : d > 0 ? `還有 ${d.toFixed(1)} 天` : `已過 ${Math.abs(d).toFixed(1)} 天`;
+      return `<tr>
+        <td>${fmt(ev.time, true)}</td>
+        <td>${ev.tf}</td>
+        <td>P${ev.p}</td>
+        <td>${ev.role === 'H' ? '可能高點' : '可能低點'}</td>
+        <td><span class="badge"><span class="dot" style="background:${COLOR_META[ev.color].css}"></span>${ev.color}${ev.offsetDays >= 0 ? '+' : ''}${ev.offsetDays}d</span></td>
+        <td>${warn}</td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="6">尚無事件。請先載入資料。</td></tr>`;
+  }
+
+  function runBacktest() {
+    if (!state.candles.length) { setStatus('btSummary', '尚無 K 線資料。', 'warn'); return; }
+    const tf = el('btCycle').value;
+    const asset = getAsset();
+    const tfStatus = timeframeCalibrationStatus(asset.symbol, tf);
+    if (tfStatus === 'insufficient') {
+      setStatus('btSummary', `${tf} 資料不足，沒有可回測的 Delta solution。`, 'bad');
+      el('tradeTable').querySelector('tbody').innerHTML = '<tr><td colspan="6">此週期資料不足</td></tr>';
+      return;
+    }
+    const confirmBars = Math.max(1, Number(el('confirmBars').value) || 4);
+    const fee = (Number(el('feeBps').value) || 0) / 10000;
+    const directionMode = el('btDirection').value;
+    const exitMode = el('exitMode').value;
+    const exitBars = Math.max(1, Number(el('exitBars').value) || 20);
+    const trailPct = Math.max(0.005, (Number(el('trailPct').value) || 8) / 100);
+    const start = state.candles[0].time;
+    const end = state.candles[state.candles.length - 1].time;
+    const events = generateEvents(tf, start, end, settings()).filter(ev => ev.time >= start && ev.time <= end);
+    const trades = [];
+    for (let i = 0; i < events.length - 1; i++) {
+      const ev = events[i];
+      const next = events.slice(i + 1).find(x => x.role !== ev.role);
+      const dir = ev.role === 'L' ? 1 : -1;
+      if (directionMode === 'long' && dir < 0) continue;
+      if (directionMode === 'short' && dir > 0) continue;
+      const idx = firstCandleIdxAtOrAfter(ev.time);
+      const reverseIdx = next ? firstCandleIdxAtOrAfter(next.time) : null;
+      if (idx == null) continue;
+      const anchor = state.candles[idx];
+      let entryIdx = null;
+      let entryReason = '';
+      const maxConfirmIdx = Math.min(
+        state.candles.length - 1,
+        idx + confirmBars,
+        reverseIdx == null ? state.candles.length - 1 : reverseIdx - 1
+      );
+      for (let j = idx + 1; j <= maxConfirmIdx; j++) {
+        const c = state.candles[j];
+        if (dir > 0 && c.close > anchor.high) { entryIdx = j; entryReason = '收盤突破低點K高點'; break; }
+        if (dir < 0 && c.close < anchor.low) { entryIdx = j; entryReason = '收盤跌破高點K低點'; break; }
+      }
+      if (entryIdx == null) continue;
+      const entry = state.candles[entryIdx].close;
+      const stop = dir > 0 ? anchor.low : anchor.high;
+      const plannedExitIdx = plannedBacktestExitIndex(entryIdx, reverseIdx, exitMode, exitBars);
+      let exitIdx = plannedExitIdx;
+      let exit = state.candles[plannedExitIdx]?.close || state.candles[state.candles.length - 1].close;
+      let reason = plannedBacktestExitReason(exitMode, reverseIdx);
+      let activeStop = stop;
+      let best = dir > 0 ? entry : entry;
+      for (let k = entryIdx + 1; k <= plannedExitIdx && k < state.candles.length; k++) {
+        const c = state.candles[k];
+        if (exitMode === 'trailing') {
+          if (dir > 0) {
+            best = Math.max(best, c.high);
+            activeStop = Math.max(stop, best * (1 - trailPct));
+          } else {
+            best = Math.min(best, c.low);
+            activeStop = Math.min(stop, best * (1 + trailPct));
+          }
+        }
+        if (dir > 0 && c.low <= activeStop) {
+          exitIdx = k;
+          exit = activeStop;
+          reason = activeStop > stop ? '移動停利' : '停損';
+          break;
+        }
+        if (dir < 0 && c.high >= activeStop) {
+          exitIdx = k;
+          exit = activeStop;
+          reason = activeStop < stop ? '移動停利' : '停損';
+          break;
+        }
+      }
+      const gross = dir * (exit - entry) / entry;
+      const net = gross - fee * 2;
+      trades.push({
+        signal: `${tf} P${ev.p}${ev.role}`,
+        signalTime: ev.time,
+        entryTime: state.candles[entryIdx].time,
+        exitTime: state.candles[exitIdx]?.time || state.candles[state.candles.length - 1].time,
+        dir,
+        entry,
+        exit,
+        stop,
+        ret: net,
+        reason: `${reason} / ${entryReason}`
+      });
+    }
+    renderBacktest(trades);
+  }
+
+  function firstCandleIdxAtOrAfter(ms) {
+    for (let i = 0; i < state.candles.length; i++) if (state.candles[i].time >= ms) return i;
+    return null;
+  }
+
+  function plannedBacktestExitIndex(entryIdx, reverseIdx, exitMode, exitBars) {
+    const lastIdx = state.candles.length - 1;
+    if (exitMode === 'fixed') return Math.min(lastIdx, entryIdx + exitBars);
+    if (exitMode === 'trailing') return lastIdx;
+    return reverseIdx != null && reverseIdx > entryIdx ? reverseIdx : lastIdx;
+  }
+
+  function plannedBacktestExitReason(exitMode, reverseIdx) {
+    if (exitMode === 'fixed') return '固定持有';
+    if (exitMode === 'trailing') return '期末平倉';
+    return reverseIdx == null ? '期末平倉' : '下一反向Delta點';
+  }
+
+  function renderBacktest(trades) {
+    const tbody = el('tradeTable').querySelector('tbody');
+    if (!trades.length) {
+      setStatus('btSummary', '沒有產生交易。可能是確認條件太嚴格、事件太少、或資料太短。', 'warn');
+      tbody.innerHTML = '<tr><td colspan="6">無交易</td></tr>';
+      return;
+    }
+    const wins = trades.filter(t => t.ret > 0).length;
+    const winRets = trades.filter(t => t.ret > 0).map(t => t.ret);
+    const lossRets = trades.filter(t => t.ret <= 0).map(t => t.ret);
+    const expectancy = trades.reduce((s,t)=>s+t.ret,0) / trades.length;
+    const avgWin = winRets.length ? winRets.reduce((s,x)=>s+x,0) / winRets.length : 0;
+    const avgLoss = lossRets.length ? lossRets.reduce((s,x)=>s+x,0) / lossRets.length : 0;
+    let equity = 1, peak = 1, mdd = 0;
+    trades.forEach(t => { equity *= (1 + t.ret); peak = Math.max(peak, equity); mdd = Math.min(mdd, equity / peak - 1); });
+    const totalReturn = equity - 1;
+    setStatus('btSummary', `交易 ${trades.length} 筆｜勝率 ${(wins/trades.length*100).toFixed(1)}%｜期望值 ${pct(expectancy)}｜累積 ${pct(totalReturn)}｜最大回撤 ${pct(mdd)}｜平均盈利 ${pct(avgWin)}｜平均虧損 ${pct(avgLoss)}`, totalReturn >= 0 ? 'good' : 'warn');
+    tbody.innerHTML = trades.slice(-60).reverse().map(t => `<tr>
+      <td>${escapeHtml(t.signal)}</td>
+      <td>${fmt(t.entryTime, true)}</td>
+      <td>${t.dir > 0 ? '多' : '空'}</td>
+      <td>${fmt(t.exitTime, true)}</td>
+      <td class="${t.ret >= 0 ? 'ok' : 'error'}">${pct(t.ret)}</td>
+      <td>${escapeHtml(t.reason)}</td>
+    </tr>`).join('');
+  }
+
+  function applyVisibleBars(n) {
+    if (!state.candles.length || !state.chart) return;
+    const len = state.candles.length;
+    const from = state.candles[Math.max(0, len - n)]?.time || state.candles[0].time;
+    const to = state.candles[len - 1].time;
+    state.chart.timeScale().setVisibleRange({ from: lwTime(from), to: lwTime(to) });
+  }
+
+  function escapeHtml(s) { return String(s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+
+  function onCsvUpload(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const candles = parseCsv(String(reader.result));
+        if (!candles.length) throw new Error('CSV 沒有有效K線');
+        state.candles = candles.slice(-Math.floor(730 * MS_DAY / (el('barTf').value === '4h' ? 4*3600*1000 : MS_DAY)) - 10);
+        state.rawDaily = state.barTf === '1d' ? state.candles : aggregateToDaily(state.candles);
+        state.activeSourceLabel = 'CSV 匯入';
+        renderAll();
+        setStatus('dataStatus', `CSV 已載入：${state.candles.length} 根 K 線。`, 'good');
+      } catch (e) {
+        setStatus('dataStatus', `CSV 解析失敗：${escapeHtml(e.message)}`, 'bad');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function bindEvents() {
+    el('stockSearch').addEventListener('input', e => renderStockResults(e.target.value));
+    el('stockResults').addEventListener('click', e => {
+      const btn = e.target.closest('[data-symbol]');
+      if (btn) selectStock(btn.dataset.symbol, true);
+    });
+    el('barTf').addEventListener('change', () => { state.barTf = el('barTf').value; if (state.candles.length) loadData(); });
+    el('loadBtn').addEventListener('click', loadData);
+    el('applyTemplate').addEventListener('click', () => {
+      try {
+        const parsed = JSON.parse(el('templateJson').value);
+        VISIBLE_TFS.forEach(tf => { if (!Array.isArray(parsed[tf])) throw new Error(`${tf} 必須是陣列`); });
+        state.customTemplates = { ...getAsset().templates, ...parsed };
+        syncAnchorControls();
+        renderSelectedAsset();
+        renderAll();
+        setStatus('dataStatus', '自訂模板已套用。', 'good');
+      } catch (e) {
+        setStatus('dataStatus', `模板錯誤：${escapeHtml(e.message)}`, 'bad');
+      }
+    });
+    el('resetTemplate').addEventListener('click', () => { state.customTemplates = null; updateTemplateText(); renderSelectedAsset(); renderAll(); });
+    ['showITD','showMTD','showGrid','showWindow','moonAnchor','moonAnchorColor','p2Role','flipRole'].forEach(id => el(id).addEventListener('change', () => {
+      renderSelectedAsset();
+      renderAll();
+    }));
+    el('runBt').addEventListener('click', runBacktest);
+    el('fitBtn').addEventListener('click', () => state.chart?.timeScale().fitContent());
+    document.querySelectorAll('[data-bars]').forEach(btn => btn.addEventListener('click', () => applyVisibleBars(Number(btn.dataset.bars))));
+    el('csvFile').addEventListener('change', e => { const file = e.target.files?.[0]; if (file) onCsvUpload(file); });
+  }
+
+  function boot() {
+    populateAssets();
+    initChart();
+    bindEvents();
+    renderCycleCards();
+    renderEventTable();
+    loadData();
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
+})();
+</script>
+</body>
+</html>
