@@ -493,7 +493,13 @@
               <label for="trailPct">移動停利 %</label>
               <input id="trailPct" type="number" min="0.5" max="50" step="0.5" value="8" />
             </div>
-            <div></div>
+            <div>
+              <label for="positionMode">持倉模式</label>
+              <select id="positionMode">
+                <option value="overlap" selected>允許重疊</option>
+                <option value="single">單一持倉</option>
+              </select>
+            </div>
           </div>
           <button id="runBt">執行回測</button>
           <div id="btSummary" class="status" style="margin-top:10px;">尚未回測。</div>
@@ -1675,10 +1681,12 @@
     const exitMode = el('exitMode').value;
     const exitBars = Math.max(1, Number(el('exitBars').value) || 20);
     const trailPct = Math.max(0.005, (Number(el('trailPct').value) || 8) / 100);
+    const positionMode = el('positionMode').value;
     const start = state.candles[0].time;
     const end = state.candles[state.candles.length - 1].time;
     const events = generateEvents(tf, start, end, settings()).filter(ev => ev.time >= start && ev.time <= end);
     const trades = [];
+    let lastExitIdx = -1;
     for (let i = 0; i < events.length - 1; i++) {
       const ev = events[i];
       const next = events.slice(i + 1).find(x => x.role !== ev.role);
@@ -1702,6 +1710,7 @@
         if (dir < 0 && c.close < anchor.low) { entryIdx = j; entryReason = '收盤跌破高點K低點'; break; }
       }
       if (entryIdx == null) continue;
+      if (positionMode === 'single' && entryIdx <= lastExitIdx) continue;
       const entry = state.candles[entryIdx].close;
       const stop = dir > 0 ? anchor.low : anchor.high;
       const plannedExitIdx = plannedBacktestExitIndex(entryIdx, reverseIdx, exitMode, exitBars);
@@ -1748,8 +1757,9 @@
         ret: net,
         reason: `${reason} / ${entryReason}`
       });
+      if (positionMode === 'single') lastExitIdx = exitIdx;
     }
-    renderBacktest(trades);
+    renderBacktest(trades, { positionMode });
   }
 
   function firstCandleIdxAtOrAfter(ms) {
@@ -1770,11 +1780,12 @@
     return reverseIdx == null ? '期末平倉' : '下一反向Delta點';
   }
 
-  function renderBacktest(trades) {
+  function renderBacktest(trades, meta = {}) {
     const tbody = el('tradeTable').querySelector('tbody');
     const period = dataPeriodText();
+    const positionLabel = meta.positionMode === 'single' ? '單一持倉' : '允許重疊';
     if (!trades.length) {
-      setStatus('btSummary', `${period}<br>沒有產生交易。可能是確認條件太嚴格、事件太少、或資料太短。`, 'warn');
+      setStatus('btSummary', `${period}<br>持倉模式：${positionLabel}<br>沒有產生交易。可能是確認條件太嚴格、事件太少、或資料太短。`, 'warn');
       tbody.innerHTML = '<tr><td colspan="6">無交易</td></tr>';
       return;
     }
@@ -1787,7 +1798,7 @@
     let equity = 1, peak = 1, mdd = 0;
     trades.forEach(t => { equity *= (1 + t.ret); peak = Math.max(peak, equity); mdd = Math.min(mdd, equity / peak - 1); });
     const totalReturn = equity - 1;
-    setStatus('btSummary', `${period}<br>交易 ${trades.length} 筆｜勝率 ${(wins/trades.length*100).toFixed(1)}%｜期望值 ${pct(expectancy)}｜累積 ${pct(totalReturn)}｜最大回撤 ${pct(mdd)}｜平均盈利 ${pct(avgWin)}｜平均虧損 ${pct(avgLoss)}`, totalReturn >= 0 ? 'good' : 'warn');
+    setStatus('btSummary', `${period}<br>持倉模式：${positionLabel}<br>交易 ${trades.length} 筆｜勝率 ${(wins/trades.length*100).toFixed(1)}%｜期望值 ${pct(expectancy)}｜累積 ${pct(totalReturn)}｜最大回撤 ${pct(mdd)}｜平均盈利 ${pct(avgWin)}｜平均虧損 ${pct(avgLoss)}`, totalReturn >= 0 ? 'good' : 'warn');
     tbody.innerHTML = trades.slice(-60).reverse().map(t => `<tr>
       <td>${escapeHtml(t.signal)}</td>
       <td>${fmt(t.entryTime, true)}</td>
