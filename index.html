@@ -538,6 +538,8 @@
   const FULL_MOON_EPOCH_UTC = Date.UTC(2000, 0, 21, 4, 40, 0);
 
   const MARKET_DATA = window.HERMES_MARKET_DATA || { meta: [], bars: {}, table: 'missing' };
+  const MARKET_BARS = window.HERMES_MARKET_BARS = window.HERMES_MARKET_BARS || {};
+  const MARKET_SHARD_LOADS = new Map();
   const CALIBRATION_DATA = window.HERMES_DELTA_CALIBRATIONS || { data: {}, statusCounts: {} };
   const DEFAULT_CALIBRATION_ANCHORS = {
     stdAnchorMs: Date.UTC(1991, 0, 1),
@@ -987,8 +989,8 @@
       if (asset.kind === 'local-tw-stock') {
         state.barTf = '1d';
         el('barTf').value = '1d';
-        candles = loadEmbeddedCandles(asset.symbol, start, end);
-        sourceLabel = `Hermes SQLite ${MARKET_DATA.table || 'daily_bars_adjusted'}`;
+        candles = await loadEmbeddedCandles(asset.symbol, start, end);
+        sourceLabel = `Hermes SQLite ${MARKET_DATA.table || 'daily_bars_adjusted'}${MARKET_DATA.sharded ? ' 分片資料' : ''}`;
         const cal = calibrationSummary(asset.symbol);
         verify = {
           status: cal.status === 'calibrated' ? 'good' : 'warn',
@@ -1073,8 +1075,41 @@
     box.innerHTML = html;
   }
 
-  function loadEmbeddedCandles(symbol, startMs, endMs) {
-    const rows = MARKET_DATA.bars?.[symbol] || [];
+  function marketShardUrl(symbol) {
+    const base = MARKET_DATA.barsPath || './delta_market_bars/';
+    const prefix = base.endsWith('/') ? base : `${base}/`;
+    return `${prefix}${encodeURIComponent(String(symbol))}.js`;
+  }
+
+  function loadMarketShard(symbol) {
+    const key = String(symbol);
+    if (MARKET_SHARD_LOADS.has(key)) return MARKET_SHARD_LOADS.get(key);
+    const promise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = marketShardUrl(key);
+      script.async = true;
+      script.onload = () => resolve(MARKET_BARS[key] || []);
+      script.onerror = () => {
+        MARKET_SHARD_LOADS.delete(key);
+        script.remove();
+        reject(new Error(`找不到 ${key} 的本機 K 線分片`));
+      };
+      document.head.appendChild(script);
+    });
+    MARKET_SHARD_LOADS.set(key, promise);
+    return promise;
+  }
+
+  async function embeddedRowsForSymbol(symbol) {
+    const key = String(symbol);
+    if (Array.isArray(MARKET_DATA.bars?.[key])) return MARKET_DATA.bars[key];
+    if (Array.isArray(MARKET_BARS[key])) return MARKET_BARS[key];
+    if (MARKET_DATA.sharded) return await loadMarketShard(key);
+    return [];
+  }
+
+  async function loadEmbeddedCandles(symbol, startMs, endMs) {
+    const rows = await embeddedRowsForSymbol(symbol);
     return cleanCandles(rows.map(row => ({
       time: Date.parse(`${row[0]}T00:00:00Z`),
       open: Number(row[1]),
