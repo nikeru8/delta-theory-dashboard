@@ -296,7 +296,10 @@
             <option value="60">60 天</option>
             <option value="180">180 天</option>
             <option value="365">1 年</option>
-            <option value="730" selected>2 年</option>
+            <option value="730">2 年</option>
+            <option value="1825">5 年</option>
+            <option value="3650">10 年</option>
+            <option value="all" selected>全部</option>
           </select>
         </div>
       </div>
@@ -413,6 +416,7 @@
       <div class="chartTop">
         <div>
           <div class="chartTitle" id="chartTitle">K 線圖</div>
+          <div class="small" id="dataPeriod">資料期間：尚未載入</div>
           <div class="small" id="visibleRange">橫軸：尚未載入</div>
         </div>
         <div class="chartTools">
@@ -541,6 +545,7 @@
   const MARKET_BARS = window.HERMES_MARKET_BARS = window.HERMES_MARKET_BARS || {};
   const MARKET_SHARD_LOADS = new Map();
   const CALIBRATION_DATA = window.HERMES_DELTA_CALIBRATIONS || { data: {}, statusCounts: {} };
+  const DEFAULT_LOOKBACK_DAYS = 3650;
   const DEFAULT_CALIBRATION_ANCHORS = {
     stdAnchorMs: Date.UTC(1991, 0, 1),
     stdAnchorColor: 'R',
@@ -683,6 +688,13 @@
     const m = String(d.getUTCMonth() + 1).padStart(2, '0');
     const da = String(d.getUTCDate()).padStart(2, '0');
     return `${y}${m}${da}`;
+  }
+  function isoDate(ms) {
+    const d = new Date(ms);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const da = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${da}`;
   }
   function fmt(ms, withTime = true) {
     const opts = withTime
@@ -859,6 +871,32 @@
     return calibrationForSymbol(symbol)?.t?.[tf]?.s || 'missing';
   }
 
+  function resolveLookbackWindow(asset) {
+    const end = Date.now();
+    const value = el('lookback').value;
+    if (value === 'all') {
+      const assetStart = Date.parse(`${asset.minDate || ''}T00:00:00Z`);
+      return {
+        start: Number.isFinite(assetStart) ? assetStart : end - DEFAULT_LOOKBACK_DAYS * MS_DAY,
+        end
+      };
+    }
+    const days = Math.max(1, Number(value) || DEFAULT_LOOKBACK_DAYS);
+    return { start: end - days * MS_DAY, end };
+  }
+
+  function dataPeriodText() {
+    if (!state.candles.length) return '資料期間：尚未載入';
+    const first = state.candles[0];
+    const last = state.candles[state.candles.length - 1];
+    return `資料期間：${isoDate(first.time)} ~ ${isoDate(last.time)}｜圖表/回測使用 ${state.candles.length} 根 K 線`;
+  }
+
+  function updateDataPeriodLabel() {
+    const node = el('dataPeriod');
+    if (node) node.textContent = dataPeriodText();
+  }
+
   function colorIndex(c) { return COLORS.indexOf(c); }
 
   function stdColorForDate(ms, s = settings()) {
@@ -976,9 +1014,7 @@
   async function loadData() {
     const asset = getAsset();
     state.barTf = el('barTf').value;
-    const lookbackDays = Math.min(730, Number(el('lookback').value));
-    const end = Date.now();
-    const start = end - lookbackDays * MS_DAY;
+    const { start, end } = resolveLookbackWindow(asset);
     setStatus('dataStatus', '載入中：正在抓 K 線並做資料檢查……', 'warn');
     let candles = [];
     let verify = { status: 'warn', message: '尚未驗證。' };
@@ -1057,7 +1093,7 @@
       state.rawDaily = state.barTf === '1d' ? candles : aggregateToDaily(candles);
       renderAll();
       const statusClass = verify.status === 'good' ? 'good' : verify.status === 'bad' ? 'bad' : 'warn';
-      setStatus('dataStatus', `完成：${sourceLabel}，${candles.length} 根 K 線。<br>${verify.message}`, statusClass);
+      setStatus('dataStatus', `完成：${sourceLabel}，${candles.length} 根 K 線。<br>${dataPeriodText()}<br>${verify.message}`, statusClass);
     } catch (e) {
       console.error(e);
       const sample = generateSampleCandles(start, end, state.barTf);
@@ -1065,7 +1101,7 @@
       state.rawDaily = state.barTf === '1d' ? sample : aggregateToDaily(sample);
       state.activeSourceLabel = '示範資料';
       renderAll();
-      setStatus('dataStatus', `資料抓取失敗：${escapeHtml(e.message)}<br>已載入「示範資料」讓介面可操作；請改用 CSV 或換資料來源。`, 'bad');
+      setStatus('dataStatus', `資料抓取失敗：${escapeHtml(e.message)}<br>已載入「示範資料」讓介面可操作；${dataPeriodText()}<br>請改用 CSV 或換資料來源。`, 'bad');
     }
   }
 
@@ -1462,6 +1498,7 @@
     if (!state.chart || !state.candleSeries) return;
     const asset = getAsset();
     el('chartTitle').textContent = `${asset.name}｜${state.barTf === '4h' ? '4 小時 K' : '日 K'}｜${state.activeSourceLabel}`;
+    updateDataPeriodLabel();
     const data = state.candles.map(c => ({ time: lwTime(c.time), open: c.open, high: c.high, low: c.low, close: c.close }));
     state.candleSeries.setData(data);
     state.volumeSeries.setData(state.candles.map(c => ({ time: lwTime(c.time), value: c.volume || 0, color: c.close >= c.open ? 'rgba(34,197,94,.18)' : 'rgba(239,68,68,.18)' })));
@@ -1471,7 +1508,6 @@
     state.events = allActiveEvents(start, end + 60 * MS_DAY);
     const markers = state.events
       .filter(ev => ev.time >= start - 10 * MS_DAY && ev.time <= end + 10 * MS_DAY)
-      .slice(-1000)
       .map(ev => ({
         time: lwTime(nearestCandleTime(ev.time) || ev.time),
         position: ev.role === 'H' ? 'aboveBar' : 'belowBar',
@@ -1734,8 +1770,9 @@
 
   function renderBacktest(trades) {
     const tbody = el('tradeTable').querySelector('tbody');
+    const period = dataPeriodText();
     if (!trades.length) {
-      setStatus('btSummary', '沒有產生交易。可能是確認條件太嚴格、事件太少、或資料太短。', 'warn');
+      setStatus('btSummary', `${period}<br>沒有產生交易。可能是確認條件太嚴格、事件太少、或資料太短。`, 'warn');
       tbody.innerHTML = '<tr><td colspan="6">無交易</td></tr>';
       return;
     }
@@ -1748,7 +1785,7 @@
     let equity = 1, peak = 1, mdd = 0;
     trades.forEach(t => { equity *= (1 + t.ret); peak = Math.max(peak, equity); mdd = Math.min(mdd, equity / peak - 1); });
     const totalReturn = equity - 1;
-    setStatus('btSummary', `交易 ${trades.length} 筆｜勝率 ${(wins/trades.length*100).toFixed(1)}%｜期望值 ${pct(expectancy)}｜累積 ${pct(totalReturn)}｜最大回撤 ${pct(mdd)}｜平均盈利 ${pct(avgWin)}｜平均虧損 ${pct(avgLoss)}`, totalReturn >= 0 ? 'good' : 'warn');
+    setStatus('btSummary', `${period}<br>交易 ${trades.length} 筆｜勝率 ${(wins/trades.length*100).toFixed(1)}%｜期望值 ${pct(expectancy)}｜累積 ${pct(totalReturn)}｜最大回撤 ${pct(mdd)}｜平均盈利 ${pct(avgWin)}｜平均虧損 ${pct(avgLoss)}`, totalReturn >= 0 ? 'good' : 'warn');
     tbody.innerHTML = trades.slice(-60).reverse().map(t => `<tr>
       <td>${escapeHtml(t.signal)}</td>
       <td>${fmt(t.entryTime, true)}</td>
@@ -1775,11 +1812,11 @@
       try {
         const candles = parseCsv(String(reader.result));
         if (!candles.length) throw new Error('CSV 沒有有效K線');
-        state.candles = candles.slice(-Math.floor(730 * MS_DAY / (el('barTf').value === '4h' ? 4*3600*1000 : MS_DAY)) - 10);
+        state.candles = candles;
         state.rawDaily = state.barTf === '1d' ? state.candles : aggregateToDaily(state.candles);
         state.activeSourceLabel = 'CSV 匯入';
         renderAll();
-        setStatus('dataStatus', `CSV 已載入：${state.candles.length} 根 K 線。`, 'good');
+        setStatus('dataStatus', `CSV 已載入：${state.candles.length} 根 K 線。<br>${dataPeriodText()}`, 'good');
       } catch (e) {
         setStatus('dataStatus', `CSV 解析失敗：${escapeHtml(e.message)}`, 'bad');
       }
