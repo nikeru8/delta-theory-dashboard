@@ -457,19 +457,19 @@
             </div>
             <div>
               <label for="confirmBars">確認等待根數</label>
-              <input id="confirmBars" type="number" min="1" max="20" value="4" />
+              <input id="confirmBars" type="number" min="1" max="20" value="2" />
             </div>
           </div>
           <div class="row">
             <div>
               <label for="feeBps">單邊成本 bps</label>
-              <input id="feeBps" type="number" min="0" max="100" value="2" />
+              <input id="feeBps" type="number" min="0" max="100" value="3" />
             </div>
             <div>
               <label for="btDirection">方向</label>
               <select id="btDirection">
-                <option value="both" selected>多空都做</option>
-                <option value="long">只做多</option>
+                <option value="both">多空都做</option>
+                <option value="long" selected>只做多</option>
                 <option value="short">只做空</option>
               </select>
             </div>
@@ -478,9 +478,9 @@
             <div>
               <label for="exitMode">出場方式</label>
               <select id="exitMode">
-                <option value="reverse" selected>下一個反向 Delta 點</option>
+                <option value="reverse">下一個反向 Delta 點</option>
                 <option value="fixed">固定持有根數</option>
-                <option value="trailing">移動停利</option>
+                <option value="trailing" selected>移動停利</option>
               </select>
             </div>
             <div>
@@ -491,13 +491,13 @@
           <div class="row">
             <div>
               <label for="trailPct">移動停利 %</label>
-              <input id="trailPct" type="number" min="0.5" max="50" step="0.5" value="8" />
+              <input id="trailPct" type="number" min="0.5" max="50" step="0.5" value="34.5" />
             </div>
             <div>
               <label for="positionMode">持倉模式</label>
               <select id="positionMode">
-                <option value="overlap" selected>允許重疊</option>
-                <option value="single">單一持倉</option>
+                <option value="overlap">允許重疊</option>
+                <option value="single" selected>單一持倉</option>
               </select>
             </div>
           </div>
