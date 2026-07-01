@@ -515,8 +515,8 @@
   </main>
 </div>
 
-<script src="./delta_market_data.js"></script>
-<script src="./delta_calibrations.js"></script>
+<script src="./delta_market_data.js?v=2026-07-01T00%3A45%3A21.786865%2B00%3A00"></script>
+<script src="./delta_calibrations.js?v=2026-07-01T00%3A56%3A35.916472%2B00%3A00"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 (() => {
@@ -1078,7 +1078,9 @@
   function marketShardUrl(symbol) {
     const base = MARKET_DATA.barsPath || './delta_market_bars/';
     const prefix = base.endsWith('/') ? base : `${base}/`;
-    return `${prefix}${encodeURIComponent(String(symbol))}.js`;
+    const version = MARKET_DATA.cacheKey || MARKET_DATA.generatedAt || '';
+    const query = version ? `?v=${encodeURIComponent(version)}` : '';
+    return `${prefix}${encodeURIComponent(String(symbol))}.js${query}`;
   }
 
   function loadMarketShard(symbol) {
