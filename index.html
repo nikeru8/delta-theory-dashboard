@@ -1487,15 +1487,16 @@
     }).observe(chartEl);
   }
 
-  function renderAll() {
-    renderChart();
+  function renderAll({ preserveRange = false } = {}) {
+    renderChart({ preserveRange });
     renderCycleCards();
     renderEventTable();
     renderOverlays();
   }
 
-  function renderChart() {
+  function renderChart({ preserveRange = false } = {}) {
     if (!state.chart || !state.candleSeries) return;
+    const previousRange = preserveRange ? state.chart.timeScale().getVisibleRange() : null;
     const asset = getAsset();
     el('chartTitle').textContent = `${asset.name}｜${state.barTf === '4h' ? '4 小時 K' : '日 K'}｜${state.activeSourceLabel}`;
     updateDataPeriodLabel();
@@ -1517,7 +1518,8 @@
         size: 1,
       }));
     state.candleSeries.setMarkers(markers);
-    state.chart.timeScale().fitContent();
+    if (previousRange) state.chart.timeScale().setVisibleRange(previousRange);
+    else state.chart.timeScale().fitContent();
     updateVisibleLabel();
   }
 
@@ -1839,16 +1841,16 @@
         state.customTemplates = { ...getAsset().templates, ...parsed };
         syncAnchorControls();
         renderSelectedAsset();
-        renderAll();
+        renderAll({ preserveRange: true });
         setStatus('dataStatus', '自訂模板已套用。', 'good');
       } catch (e) {
         setStatus('dataStatus', `模板錯誤：${escapeHtml(e.message)}`, 'bad');
       }
     });
-    el('resetTemplate').addEventListener('click', () => { state.customTemplates = null; updateTemplateText(); renderSelectedAsset(); renderAll(); });
+    el('resetTemplate').addEventListener('click', () => { state.customTemplates = null; updateTemplateText(); renderSelectedAsset(); renderAll({ preserveRange: true }); });
     ['showITD','showMTD','showGrid','showWindow','moonAnchor','moonAnchorColor','p2Role','flipRole'].forEach(id => el(id).addEventListener('change', () => {
       renderSelectedAsset();
-      renderAll();
+      renderAll({ preserveRange: true });
     }));
     el('runBt').addEventListener('click', runBacktest);
     el('fitBtn').addEventListener('click', () => state.chart?.timeScale().fitContent());
