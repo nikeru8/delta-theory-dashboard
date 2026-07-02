@@ -268,7 +268,7 @@
 <header>
   <h1>Delta 理論台股互動查詢與回測模型</h1>
   <div class="subtitle">
-    用「時間網格」找可能轉折窗口，再用 K 線驗證。內建：中短期 ITD、中期 MTD；可查現在所在位置、下一個可能轉折、歷史疊圖、簡易回測。
+    用「時間網格」找可能轉折窗口，再用 K 線驗證。內建：中短期 ITD、中期 MTD（含逐輪反轉判定與逐點校準模板）；可查現在所在位置、下一個可能轉折、歷史疊圖、簡易回測。
   </div>
 </header>
 
@@ -399,7 +399,7 @@
         <button id="applyTemplate" class="secondary">套用模板</button>
         <button id="resetTemplate" class="secondary">重置模板</button>
       </div>
-      <p class="note" style="margin-bottom:0;">格式：每個週期一組陣列，點位用 <span class="mono">p,color,offsetDays,role</span>。</p>
+      <p class="note" style="margin-bottom:0;">格式：每個週期一組陣列，點位用 <span class="mono">p,color,offsetDays,role,cyc</span>（cyc＝該點距 P1 色線第幾條線，供反轉輪定位）。套用自訂模板後，逐輪反轉判定會停用。</p>
     </div>
 
     <div class="section">
@@ -463,7 +463,7 @@
           <div class="row">
             <div>
               <label for="feeBps">單邊成本 bps</label>
-              <input id="feeBps" type="number" min="0" max="100" value="3" />
+              <input id="feeBps" type="number" min="0" max="100" value="30" />
             </div>
             <div>
               <label for="btDirection">方向</label>
@@ -519,14 +519,17 @@
         <b>人話版：</b>Delta 顏色線只是時間尺，不是紅就空、綠就多。真正的使用方式是：先看現在靠近哪個 Delta 點，再看價格有沒有出現「該跌不跌 / 該漲不漲」或突破確認。<br><br>
         <b>ITD：</b>每次滿月放一條顏色線，四個月亮循環一輪。<br>
         <b>MTD：</b>每三次滿月放一條顏色線，十二個月亮循環一輪。<br><br>
-        <b>進出場提醒：</b>預測低點附近，等「收盤站回低點 K 高點」再做多；預測高點附近，等「收盤跌破高點 K 低點」再做空或避開。停損放在低點 K 下方或高點 K 上方。這裡的回測採用確認日收盤進場，並可選下一個反向 Delta 點、固定持有根數或移動停利出場。<br><br><b>台股資料：</b>日 K 由本機 Hermes SQLite 資料包提供，不需 Yahoo/TWSE 網路請求；Delta 模板由每檔股票自己的歷史轉折校準，並在股票資訊中標示已校準、弱校準或資料不足。若要測其他來源，也可用 CSV 匯入。
+        <b>反轉（Inversion）：</b>依原版 Delta 理論，每輪 Point 1 附近可能發生高低點互換。校準採 walk-forward 逐輪判定：每輪開始時，只用「上一輪已實現的轉折」決定本輪極性，不看未來資料。事件表、疊圖與回測都已套用；標「反轉輪」的事件代表該輪高低點互換。套用自訂模板時反轉判定停用。<br><br>
+        <b>模板校準：</b>每檔股票以 4 色 × 相位偏移 × 首點角色做網格搜尋（train 70%），再對 10 個點做受限逐點精修（ITD 每點最多 ±3 天、MTD ±9 天），最後以樣本外 30% 驗證。<b>已校準</b>＝樣本外分數 ≥0.22、訓練分數 ≥0.18、且樣本外命中 ≥10 個轉折；達不到就標弱校準——多數台股是弱校準，代表樣本外沒有可靠邊際，請把預測當研究參考而非訊號。<br><br>
+        <b>週期範圍：</b>本站只做 ITD 與 MTD。STD（4 日）在日 K 解析度下轉折窗幾乎天天重疊，預設隱藏；LTD（4 年）與 SLTD（19 年）以本站約 10 年的資料分別只有 2.5 輪與不足 1 輪，無法校準，不提供。<br><br>
+        <b>進出場提醒：</b>預測低點附近，等「收盤站回低點 K 高點」再做多；預測高點附近，等「收盤跌破高點 K 低點」再做空或避開。停損放在低點 K 下方或高點 K 上方。這裡的回測採用確認日收盤進場，並可選下一個反向 Delta 點、固定持有根數或移動停利出場。單邊成本預設 30 bps（雙邊約 0.6%，接近台股手續費＋證交稅實際水準）。<br><br><b>台股資料：</b>日 K 由本機 Hermes SQLite 資料包提供，不需 Yahoo/TWSE 網路請求；Delta 模板由每檔股票自己的歷史轉折校準，並在股票資訊中標示已校準、弱校準或資料不足。若要測其他來源，也可用 CSV 匯入。
       </div>
     </section>
   </main>
 </div>
 
 <script src="./delta_market_data.js?v=2026-07-01T00%3A45%3A21.786865%2B00%3A00"></script>
-<script src="./delta_calibrations.js?v=2026-07-01T00%3A56%3A35.916472%2B00%3A00"></script>
+<script src="./delta_calibrations.js?v=2026-07-02T06%3A59%3A32.482407%2B00%3A00"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 (() => {
@@ -593,8 +596,37 @@
       color: pt.color,
       offsetDays: Number(pt.offsetDays || 0),
       role: pt.role === 'L' ? 'L' : 'H',
+      cyc: Number.isFinite(Number(pt.cyc)) ? Number(pt.cyc) : null,
       source: pt.source || 'calibrated'
     }));
+  }
+
+  // --- Walk-forward inversion（逐輪反轉）---
+  // 校準檔為每個週期輸出 inv = { cur, hist: [[cycleStartMoonIndex, polarity], ...] }（RLE，只記變化點）。
+  // 事件由某條色線（moonIndex = m）產生、模板點帶 cyc（該點距 P1 色線的線數 0..3），
+  // 事件所屬輪的起點 = m - cyc * (MTD ? 3 : 1)；polarity=1 代表該輪高低點互換。
+  function activeInversion(tf) {
+    if (state.customTemplates) return null;
+    const item = calibrationForSymbol(state.assetKey)?.t?.[tf];
+    const inv = item?.inv;
+    if (!inv || !Array.isArray(inv.hist) || !inv.hist.length) return null;
+    return inv;
+  }
+
+  function invPolarityFor(inv, cycleStart) {
+    if (!inv || cycleStart == null) return 0;
+    let pol = Number(inv.hist[0][1]) || 0;
+    for (const entry of inv.hist) {
+      if (Number(entry[0]) <= cycleStart) pol = Number(entry[1]) || 0;
+      else break;
+    }
+    return pol;
+  }
+
+  function inversionBadgeText(inv) {
+    if (!inv) return '';
+    const switches = Math.max(0, inv.hist.length - 1);
+    return `${inv.cur ? '本輪反轉' : '本輪正常'}｜反轉${switches}次`;
   }
 
   function templatesForSymbol(symbol) {
@@ -644,7 +676,10 @@
       const item = c.t?.[tf];
       if (!item) return `${tf} 無資料`;
       const score = Number(item.vs || 0).toFixed(2);
-      return `${tf} ${calibrationLabel(item.s)} 樣本外${score} 命中${item.mv || 0}/${item.ev || 0}`;
+      const invTxt = (item.inv && Array.isArray(item.inv.hist) && item.inv.hist.length)
+        ? `（${item.inv.cur ? '本輪反轉' : '本輪正常'}，歷史反轉${Math.max(0, item.inv.hist.length - 1)}次）`
+        : '';
+      return `${tf} ${calibrationLabel(item.s)} 樣本外${score} 命中${item.mv || 0}/${item.ev || 0}${invTxt}`;
     }).join('｜');
     return {
       status: activeStatuses.length ? worstCalibrationStatus(activeStatuses) : 'missing',
@@ -964,11 +999,11 @@
         t += MS_DAY;
       }
     } else if (tf === 'ITD') {
-      generateFullMoons(startMs, endMs).forEach(m => grids.push({ time: m.time, color: colorForMoonIndex(m.moonIndex, s), tf: 'ITD', label: 'Full moon line' }));
+      generateFullMoons(startMs, endMs).forEach(m => grids.push({ time: m.time, color: colorForMoonIndex(m.moonIndex, s), tf: 'ITD', moonIndex: m.moonIndex, label: 'Full moon line' }));
     } else if (tf === 'MTD') {
       const anchorIdx = Math.round((s.moonAnchorMs - FULL_MOON_EPOCH_UTC) / SYNODIC_MS);
       generateFullMoons(startMs, endMs).forEach(m => {
-        if (mod(m.moonIndex - anchorIdx, 3) === 0) grids.push({ time: m.time, color: colorForMtdLine(m.moonIndex, s), tf: 'MTD', label: 'Every 3rd full moon line' });
+        if (mod(m.moonIndex - anchorIdx, 3) === 0) grids.push({ time: m.time, color: colorForMtdLine(m.moonIndex, s), tf: 'MTD', moonIndex: m.moonIndex, label: 'Every 3rd full moon line' });
       });
     }
     return grids.sort((a,b) => a.time - b.time);
@@ -994,6 +1029,8 @@
   function generateEvents(tf, startMs, endMs, s = settings()) {
     const templates = getTemplates();
     const tpl = templates[tf] || [];
+    const inv = tf === 'STD' ? null : activeInversion(tf);
+    const moonStep = tf === 'MTD' ? 3 : 1;
     const grids = generateGrid(tf, startMs - 120 * MS_DAY, endMs + 120 * MS_DAY, s);
     const events = [];
     grids.forEach(g => {
@@ -1001,7 +1038,15 @@
         if (pt.color !== g.color) return;
         const t = g.time + Number(pt.offsetDays || 0) * MS_DAY;
         if (t >= startMs - 30 * MS_DAY && t <= endMs + 30 * MS_DAY) {
-          const role = pt.role === 'H' || pt.role === 'L' ? pt.role : roleForPoint(Number(pt.p), s);
+          let role = pt.role === 'H' || pt.role === 'L' ? pt.role : roleForPoint(Number(pt.p), s);
+          let inverted = false;
+          if (inv && g.moonIndex != null && pt.cyc != null) {
+            const cycleStart = g.moonIndex - Number(pt.cyc) * moonStep;
+            if (invPolarityFor(inv, cycleStart) === 1) {
+              role = role === 'H' ? 'L' : 'H';
+              inverted = true;
+            }
+          }
           events.push({
             time: t,
             tf,
@@ -1009,6 +1054,7 @@
             color: pt.color,
             offsetDays: Number(pt.offsetDays || 0),
             role,
+            inverted,
             source: pt.source || 'custom',
             windowStart: t - windowDays(tf) * MS_DAY,
             windowEnd: t + windowDays(tf) * MS_DAY,
@@ -1637,7 +1683,7 @@
     const nearby = state.events.filter(ev => Math.abs(ev.time - ms) <= Math.max(tfMs, windowDays(ev.tf) * MS_DAY)).slice(0, 5);
     let html = `<b>${fmt(ms, true)}</b><br>區段：${fmt(ms, true)} ～ ${fmt(ms + tfMs, true)}`;
     if (c) html += `<br>O ${num(c.open)} H ${num(c.high)} L ${num(c.low)} C ${num(c.close)}`;
-    if (nearby.length) html += '<br><br>' + nearby.map(ev => `${ev.tf} P${ev.p} ${ev.role === 'H' ? '預測高點' : '預測低點'}｜理論 ${fmt(ev.time, true)}｜窗 ${eventWindowText(ev)}`).join('<br>');
+    if (nearby.length) html += '<br><br>' + nearby.map(ev => `${ev.tf} P${ev.p} ${ev.role === 'H' ? '預測高點' : '預測低點'}${ev.inverted ? '（反轉輪）' : ''}｜理論 ${fmt(ev.time, true)}｜窗 ${eventWindowText(ev)}`).join('<br>');
     tt.innerHTML = html;
     tt.style.left = Math.min(param.point.x + 18, el('chartWrap').clientWidth - 240) + 'px';
     tt.style.top = Math.min(param.point.y + 18, el('chartWrap').clientHeight - 150) + 'px';
@@ -1661,11 +1707,13 @@
       const card = document.createElement('div');
       card.className = 'card';
       const color = tf === 'STD' ? stdColorForDate(now, s) : (prevGrid?.color || 'R');
-      const nextTxt = nextEv ? `${fmt(nextEv.time, true)}｜P${nextEv.p} ${nextEv.role === 'H' ? '可能高點' : '可能低點'}` : '無資料';
+      const inv = tf === 'STD' ? null : activeInversion(tf);
+      const invBadge = inv ? `<span class="badge">${inversionBadgeText(inv)}</span>` : '';
+      const nextTxt = nextEv ? `${fmt(nextEv.time, true)}｜P${nextEv.p} ${nextEv.role === 'H' ? '可能高點' : '可能低點'}${nextEv.inverted ? '（反轉輪）' : ''}` : '無資料';
       const days = nextEv ? (nextEv.time - now) / MS_DAY : null;
       const phase = prevGrid && nextGrid ? ((now - prevGrid.time) / (nextGrid.time - prevGrid.time) * 100) : 0;
       card.innerHTML = `
-        <div class="title"><span>${tfLabel(tf)}</span><span class="badge"><span class="dot" style="background:${COLOR_META[color].css}"></span>${COLOR_META[color].zh}</span></div>
+        <div class="title"><span>${tfLabel(tf)}</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${invBadge}<span class="badge"><span class="dot" style="background:${COLOR_META[color].css}"></span>${COLOR_META[color].zh}</span></span></div>
         <div class="big">${nextEv ? `${days >= 0 ? '距下一轉折' : '已過'} ${Math.abs(days).toFixed(1)} 天` : '無轉折資料'}</div>
         <div class="small">
           現在位置：${prevGrid ? COLOR_META[prevGrid.color].zh + '線後' : ''} ${phase.toFixed(1)}%<br>
@@ -1691,7 +1739,7 @@
         <td>${fmt(ev.time, true)}</td>
         <td>${ev.tf}</td>
         <td>P${ev.p}</td>
-        <td>${ev.role === 'H' ? '可能高點' : '可能低點'}</td>
+        <td>${ev.role === 'H' ? '可能高點' : '可能低點'}${ev.inverted ? '<span class="warnText">（反轉輪）</span>' : ''}</td>
         <td><span class="badge"><span class="dot" style="background:${COLOR_META[ev.color].css}"></span>${ev.color}${ev.offsetDays >= 0 ? '+' : ''}${ev.offsetDays}d</span></td>
         <td>${eventWindowText(ev)}</td>
         <td>${anchorInfoForEvent(ev)}</td>
