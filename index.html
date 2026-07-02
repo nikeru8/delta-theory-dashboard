@@ -438,7 +438,7 @@
         <h2>下一批 Delta 預測轉折</h2>
         <div class="section tableWrap">
           <table id="eventTable">
-            <thead><tr><th>時間</th><th>週期</th><th>點位</th><th>角色</th><th>顏色線</th><th>提醒</th></tr></thead>
+            <thead><tr><th>理論時間</th><th>週期</th><th>點位</th><th>角色</th><th>顏色線</th><th>轉折窗</th><th>確認錨點</th><th>提醒</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -896,6 +896,27 @@
     const first = state.candles[0];
     const last = state.candles[state.candles.length - 1];
     return `資料期間：${isoDate(first.time)} ~ ${isoDate(last.time)}｜圖表/回測使用 ${state.candles.length} 根 K 線`;
+  }
+
+  function eventWindowText(ev) {
+    return `${fmt(ev.windowStart, true)} ~ ${fmt(ev.windowEnd, true)}`;
+  }
+
+  function anchorInfoForEvent(ev) {
+    const idx = firstCandleIdxAtOrAfter(ev.time);
+    if (idx == null) {
+      return '<span class="warnText">尚未形成</span><br><span class="small">等待理論時間後的下一根交易日 K</span>';
+    }
+    const anchor = state.candles[idx];
+    const confirmBars = Math.max(1, Number(el('confirmBars')?.value) || 2);
+    const endIdx = Math.min(state.candles.length - 1, idx + confirmBars);
+    const directionRule = ev.role === 'L'
+      ? `收盤 &gt; ${num(anchor.high)}`
+      : `收盤 &lt; ${num(anchor.low)}`;
+    const confirmText = endIdx > idx
+      ? `${fmt(state.candles[idx + 1].time, false)} ~ ${fmt(state.candles[endIdx].time, false)}`
+      : '等待下一根 K';
+    return `${fmt(anchor.time, false)}<br><span class="small">${directionRule}｜確認 ${confirmText}</span>`;
   }
 
   function updateDataPeriodLabel() {
@@ -1514,7 +1535,7 @@
     const end = state.candles[state.candles.length - 1]?.time || Date.now();
     state.events = allActiveEvents(start, end + 60 * MS_DAY);
     const markers = state.events
-      .filter(ev => ev.time >= start - 10 * MS_DAY && ev.time <= end + 10 * MS_DAY)
+      .filter(ev => ev.time >= start - 10 * MS_DAY && ev.time <= end)
       .map(ev => ({
         time: lwTime(nearestCandleTime(ev.time) || ev.time),
         position: ev.role === 'H' ? 'aboveBar' : 'belowBar',
@@ -1531,12 +1552,18 @@
 
   function nearestCandleTime(ms) {
     if (!state.candles.length) return null;
+    if (!isWithinLoadedCandleRange(ms)) return null;
     let lo = 0, hi = state.candles.length - 1;
     while (lo < hi) {
       const mid = Math.floor((lo + hi) / 2);
       if (state.candles[mid].time < ms) lo = mid + 1; else hi = mid;
     }
     return state.candles[lo]?.time || state.candles[state.candles.length - 1].time;
+  }
+
+  function isWithinLoadedCandleRange(timeMs) {
+    if (!state.candles.length) return false;
+    return timeMs >= state.candles[0].time && timeMs <= state.candles[state.candles.length - 1].time;
   }
 
   function renderOverlays() {
@@ -1548,11 +1575,16 @@
     if (!range) return;
     const startMs = fromLW(Number(range.from));
     const endMs = fromLW(Number(range.to));
+    const loadedStart = state.candles[0].time;
+    const loadedEnd = state.candles[state.candles.length - 1].time;
     const visibleEvents = state.events.filter(ev => ev.time >= startMs - 30 * MS_DAY && ev.time <= endMs + 30 * MS_DAY);
     if (s.show.window) {
       visibleEvents.forEach(ev => {
-        const x1 = coordinateForTime(ev.windowStart);
-        const x2 = coordinateForTime(ev.windowEnd);
+        const clippedStart = Math.max(ev.windowStart, loadedStart);
+        const clippedEnd = Math.min(ev.windowEnd, loadedEnd);
+        if (clippedEnd < clippedStart) return;
+        const x1 = coordinateForTime(clippedStart);
+        const x2 = coordinateForTime(clippedEnd);
         if (x1 == null || x2 == null) return;
         const b = document.createElement('div');
         b.className = 'band';
@@ -1571,6 +1603,7 @@
   }
 
   function coordinateForTime(timeMs) {
+    if (!isWithinLoadedCandleRange(timeMs)) return null;
     const direct = state.chart.timeScale().timeToCoordinate(lwTime(timeMs));
     if (direct != null && Number.isFinite(direct)) return direct;
     const nearest = nearestCandleTime(timeMs);
@@ -1604,7 +1637,7 @@
     const nearby = state.events.filter(ev => Math.abs(ev.time - ms) <= Math.max(tfMs, windowDays(ev.tf) * MS_DAY)).slice(0, 5);
     let html = `<b>${fmt(ms, true)}</b><br>區段：${fmt(ms, true)} ～ ${fmt(ms + tfMs, true)}`;
     if (c) html += `<br>O ${num(c.open)} H ${num(c.high)} L ${num(c.low)} C ${num(c.close)}`;
-    if (nearby.length) html += '<br><br>' + nearby.map(ev => `${ev.tf} P${ev.p} ${ev.role === 'H' ? '預測高點' : '預測低點'}｜${COLOR_META[ev.color].zh}線 ${ev.offsetDays >= 0 ? '+' : ''}${ev.offsetDays}d`).join('<br>');
+    if (nearby.length) html += '<br><br>' + nearby.map(ev => `${ev.tf} P${ev.p} ${ev.role === 'H' ? '預測高點' : '預測低點'}｜理論 ${fmt(ev.time, true)}｜窗 ${eventWindowText(ev)}`).join('<br>');
     tt.innerHTML = html;
     tt.style.left = Math.min(param.point.x + 18, el('chartWrap').clientWidth - 240) + 'px';
     tt.style.top = Math.min(param.point.y + 18, el('chartWrap').clientHeight - 150) + 'px';
@@ -1660,9 +1693,11 @@
         <td>P${ev.p}</td>
         <td>${ev.role === 'H' ? '可能高點' : '可能低點'}</td>
         <td><span class="badge"><span class="dot" style="background:${COLOR_META[ev.color].css}"></span>${ev.color}${ev.offsetDays >= 0 ? '+' : ''}${ev.offsetDays}d</span></td>
+        <td>${eventWindowText(ev)}</td>
+        <td>${anchorInfoForEvent(ev)}</td>
         <td>${warn}</td>
       </tr>`;
-    }).join('') || `<tr><td colspan="6">尚無事件。請先載入資料。</td></tr>`;
+    }).join('') || `<tr><td colspan="8">尚無事件。請先載入資料。</td></tr>`;
   }
 
   function runBacktest() {
@@ -1863,6 +1898,7 @@
       renderSelectedAsset();
       renderAll({ preserveRange: true });
     }));
+    el('confirmBars').addEventListener('input', renderEventTable);
     el('runBt').addEventListener('click', runBacktest);
     el('fitBtn').addEventListener('click', () => state.chart?.timeScale().fitContent());
     document.querySelectorAll('[data-bars]').forEach(btn => btn.addEventListener('click', () => applyVisibleBars(Number(btn.dataset.bars))));
