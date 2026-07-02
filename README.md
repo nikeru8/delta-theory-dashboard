@@ -10,11 +10,11 @@ Open the dashboard at the repository GitHub Pages URL. The app loads:
 - `delta_calibrations.js`
 - `scripts/delta_market_export.py`
 - `scripts/delta_calibrate.py`
-- `scripts/delta_pipeline_manifest.txt`
+- `delta_pipeline_manifest.txt`
 
 The market data index is sharded by stock symbol so GitHub Pages does not need
 to serve one very large JavaScript bundle.
 
 `delta_calibrations.js` is generated output. The calibration/template search
 logic lives in `scripts/delta_calibrate.py`; see
-`scripts/delta_pipeline_manifest.txt` for source and output paths.
+`delta_pipeline_manifest.txt` for source and output paths.
